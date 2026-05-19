@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+vendor/
+dist/
+build/
+coverage/
+
+# Generated files
+*.log
+*.tmp
+*.cache
+*.lock
+
+# Environment & secrets
+.env
+.env.*
+secrets/
+*.pem
+*.key
+
+# IDE files
+.vscode/
+.idea/
+
+# Large datasets
+data/
+datasets/
+
+# AI artifacts
+.claude/
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
