@@ -30,5 +30,14 @@ class __Config:
     def get_https_redirect(self) -> bool:
         return os.getenv("HTTPS_REDIRECT", "false").lower() == "true"
 
+    def get_openai_api_key(self) -> str:
+        return os.getenv("OPENAI_API_KEY", "")
+
+    def get_openai_model(self) -> str:
+        return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    def get_mock_video_cdn_base(self) -> str:
+        return os.getenv("MOCK_VIDEO_CDN_BASE", "https://mock-cdn.example.com/videos")
+
 
 config = __Config()

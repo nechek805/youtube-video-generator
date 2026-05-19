@@ -17,6 +17,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +51,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,12 +85,27 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     command: uv run celery -A src.celery_app.celery_main:celery_app worker --loglevel=info --without-mingle --without-gossip
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
 
   redis:
     image: redis:7-alpine
