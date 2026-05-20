@@ -31,11 +31,17 @@ def _now() -> datetime:
 class VideoService:
     """Thin orchestration layer over the LangGraph workflow.
 
-    Each public method:
-      1. Ensures the caller owns the project (or creates a new one).
-      2. Guards the project's current status against what the action expects.
-      3. Invokes the workflow graph with an action descriptor.
-      4. Returns the freshly-reloaded project (nodes persist their own writes).
+    Each mutating method:
+      1. Calls ``_ensure_owner`` (raises ProjectNotFound / ProjectNotOwnedByUser).
+      2. Guards the current ``workflow_status`` and the relevant phase status;
+         raises ``InvalidProjectStatus`` if the action isn't valid here.
+      3. Either:
+           a. Invokes the graph with an action descriptor (for LLM /
+              generation / phase transitions), OR
+           b. Writes directly via the repository (for trivial edits and
+              project creation).
+      4. Returns the freshly reloaded project (nodes persist their own
+         writes during the invocation).
     """
 
     def __init__(self, db: AsyncSession) -> None:
@@ -51,7 +57,7 @@ class VideoService:
         )
 
     # ------------------------------------------------------------------
-    # Read helpers
+    # Helpers
     # ------------------------------------------------------------------
 
     async def _ensure_owner(self, project_id: int, user_id: int) -> VideoProject:
@@ -61,6 +67,76 @@ class VideoService:
         if project.user_id != user_id:
             raise ProjectNotOwnedByUser(project_id)
         return project
+
+    def _guard_prompt_ready(self, project: VideoProject) -> None:
+        if (
+            project.workflow_status != WorkflowStatus.PROMPT
+            or project.prompt_status != PromptStatus.READY
+        ):
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}, prompt={project.prompt_status.value}",
+                required=f"workflow={WorkflowStatus.PROMPT.value}, prompt={PromptStatus.READY.value}",
+            )
+
+    def _guard_prompt_phase(self, project: VideoProject) -> None:
+        """Allow generate-prompt at any prompt_status while in PROMPT phase."""
+        if project.workflow_status != WorkflowStatus.PROMPT:
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}",
+                required=f"workflow={WorkflowStatus.PROMPT.value}",
+            )
+
+    def _guard_video_phase(self, project: VideoProject) -> None:
+        """Allow generate-video at any video_status while in VIDEO phase."""
+        if project.workflow_status != WorkflowStatus.VIDEO:
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}",
+                required=f"workflow={WorkflowStatus.VIDEO.value}",
+            )
+
+    def _guard_video_ready(self, project: VideoProject) -> None:
+        if (
+            project.workflow_status != WorkflowStatus.VIDEO
+            or project.video_status != VideoStatus.READY
+        ):
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}, video={project.video_status.value}",
+                required=f"workflow={WorkflowStatus.VIDEO.value}, video={VideoStatus.READY.value}",
+            )
+
+    def _guard_metadata_phase(self, project: VideoProject) -> None:
+        if project.workflow_status != WorkflowStatus.METADATA:
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}",
+                required=f"workflow={WorkflowStatus.METADATA.value}",
+            )
+
+    def _guard_metadata_ready(self, project: VideoProject) -> None:
+        if (
+            project.workflow_status != WorkflowStatus.METADATA
+            or project.metadata_status != MetadataStatus.READY
+        ):
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}, metadata={project.metadata_status.value}",
+                required=f"workflow={WorkflowStatus.METADATA.value}, metadata={MetadataStatus.READY.value}",
+            )
+
+    def _guard_completed(self, project: VideoProject) -> None:
+        if project.workflow_status != WorkflowStatus.COMPLETED:
+            raise InvalidProjectStatus(
+                current=project.workflow_status.value,
+                required=WorkflowStatus.COMPLETED.value,
+            )
+
+    async def _reload(self, project_id: int) -> VideoProject:
+        project = await self.repo.get_project_by_id(project_id)
+        if project is None:
+            raise ProjectNotFound(project_id)
+        return project
+
+    # ------------------------------------------------------------------
+    # Read-only
+    # ------------------------------------------------------------------
 
     async def get_project(self, project_id: int, user_id: int) -> VideoProject:
         return await self._ensure_owner(project_id, user_id)
@@ -83,17 +159,13 @@ class VideoService:
 
     async def get_download_info(self, project_id: int, user_id: int) -> str:
         project = await self._ensure_owner(project_id, user_id)
-        if project.workflow_status != WorkflowStatus.COMPLETED:
-            raise InvalidProjectStatus(
-                current=project.workflow_status.value,
-                required=WorkflowStatus.COMPLETED.value,
-            )
+        self._guard_completed(project)
         if not project.video_url:
             raise VideoGenerationFailed("No video URL found for completed project")
         return project.video_url
 
     # ------------------------------------------------------------------
-    # Workflow actions
+    # Creation (no graph)
     # ------------------------------------------------------------------
 
     async def create_project(self, user_id: int, topic: str) -> VideoProject:
@@ -109,63 +181,84 @@ class VideoService:
         )
         project = await self.repo.create_project(project)
         logger.info("Project %d created (user=%d topic=%r)", project.id, user_id, topic)
+        return await self._reload(project.id)
 
-        await self.graph.ainvoke({
-            "project_id": project.id,
-            "action": "create",
-            "topic": topic,
-        })
-        return await self.repo.get_project_by_id(project.id)
+    # ------------------------------------------------------------------
+    # Prompt phase
+    # ------------------------------------------------------------------
 
-    async def regenerate_prompt(self, project_id: int, user_id: int) -> VideoProject:
+    async def generate_prompt(self, project_id: int, user_id: int) -> VideoProject:
         project = await self._ensure_owner(project_id, user_id)
-        if project.workflow_status != WorkflowStatus.PROMPT:
-            raise InvalidProjectStatus(
-                current=project.workflow_status.value,
-                required=WorkflowStatus.PROMPT.value,
-            )
+        self._guard_prompt_phase(project)
         await self.graph.ainvoke({
             "project_id": project.id,
-            "action": "regenerate_prompt",
+            "action": "generate_prompt",
         })
-        return await self.repo.get_project_by_id(project.id)
+        return await self._reload(project.id)
 
-    async def approve_prompt(
-        self, project_id: int, user_id: int, edited_prompt: str | None
+    async def edit_prompt(
+        self, project_id: int, user_id: int, edited_prompt: str
     ) -> VideoProject:
         project = await self._ensure_owner(project_id, user_id)
-        if (
-            project.workflow_status != WorkflowStatus.PROMPT
-            or project.prompt_status != PromptStatus.READY
-        ):
-            raise InvalidProjectStatus(
-                current=f"workflow={project.workflow_status.value}, prompt={project.prompt_status.value}",
-                required=f"workflow={WorkflowStatus.PROMPT.value}, prompt={PromptStatus.READY.value}",
-            )
+        self._guard_prompt_ready(project)
+        project.edited_prompt = edited_prompt.strip()
+        project.updated_at = _now()
+        await self.repo.update_project(project)
+        logger.info("Prompt edited for project %d", project.id)
+        return await self._reload(project.id)
+
+    async def approve_prompt(self, project_id: int, user_id: int) -> VideoProject:
+        project = await self._ensure_owner(project_id, user_id)
+        self._guard_prompt_ready(project)
         await self.graph.ainvoke({
             "project_id": project.id,
             "action": "approve_prompt",
-            "edited_prompt": edited_prompt,
         })
-        return await self.repo.get_project_by_id(project.id)
+        return await self._reload(project.id)
 
-    async def approve_video(
-        self, project_id: int, user_id: int, approved: bool
-    ) -> VideoProject:
+    # ------------------------------------------------------------------
+    # Video phase
+    # ------------------------------------------------------------------
+
+    async def generate_video(self, project_id: int, user_id: int) -> VideoProject:
         project = await self._ensure_owner(project_id, user_id)
-        if (
-            project.workflow_status != WorkflowStatus.VIDEO
-            or project.video_status != VideoStatus.READY
-        ):
-            raise InvalidProjectStatus(
-                current=f"workflow={project.workflow_status.value}, video={project.video_status.value}",
-                required=f"workflow={WorkflowStatus.VIDEO.value}, video={VideoStatus.READY.value}",
-            )
+        self._guard_video_phase(project)
         await self.graph.ainvoke({
             "project_id": project.id,
-            "action": "approve_video" if approved else "reject_video",
+            "action": "generate_video",
         })
-        return await self.repo.get_project_by_id(project.id)
+        return await self._reload(project.id)
+
+    async def approve_video(self, project_id: int, user_id: int) -> VideoProject:
+        project = await self._ensure_owner(project_id, user_id)
+        self._guard_video_ready(project)
+        await self.graph.ainvoke({
+            "project_id": project.id,
+            "action": "approve_video",
+        })
+        return await self._reload(project.id)
+
+    async def reject_video(self, project_id: int, user_id: int) -> VideoProject:
+        project = await self._ensure_owner(project_id, user_id)
+        self._guard_video_ready(project)
+        await self.graph.ainvoke({
+            "project_id": project.id,
+            "action": "reject_video",
+        })
+        return await self._reload(project.id)
+
+    # ------------------------------------------------------------------
+    # Metadata phase
+    # ------------------------------------------------------------------
+
+    async def generate_metadata(self, project_id: int, user_id: int) -> VideoProject:
+        project = await self._ensure_owner(project_id, user_id)
+        self._guard_metadata_phase(project)
+        await self.graph.ainvoke({
+            "project_id": project.id,
+            "action": "generate_metadata",
+        })
+        return await self._reload(project.id)
 
     async def approve_metadata(
         self,
@@ -175,21 +268,26 @@ class VideoService:
         edited_description: str | None,
     ) -> VideoProject:
         project = await self._ensure_owner(project_id, user_id)
-        if (
-            project.workflow_status != WorkflowStatus.METADATA
-            or project.metadata_status != MetadataStatus.READY
-        ):
-            raise InvalidProjectStatus(
-                current=f"workflow={project.workflow_status.value}, metadata={project.metadata_status.value}",
-                required=f"workflow={WorkflowStatus.METADATA.value}, metadata={MetadataStatus.READY.value}",
-            )
+        self._guard_metadata_ready(project)
+        title = (edited_title or "").strip()
+        description = (edited_description or "").strip()
+        if title:
+            project.title = title
+        if description:
+            project.description = description
+        project.updated_at = _now()
+        await self.repo.update_project(project)
+        logger.info("Metadata edits saved for project %d", project.id)
+        return await self._reload(project.id)
+
+    async def finalize(self, project_id: int, user_id: int) -> VideoProject:
+        project = await self._ensure_owner(project_id, user_id)
+        self._guard_metadata_ready(project)
         await self.graph.ainvoke({
             "project_id": project.id,
-            "action": "approve_metadata",
-            "edited_title": edited_title,
-            "edited_description": edited_description,
+            "action": "finalize",
         })
-        return await self.repo.get_project_by_id(project.id)
+        return await self._reload(project.id)
 
     # ------------------------------------------------------------------
     # YouTube publishing (stub)
@@ -197,11 +295,7 @@ class VideoService:
 
     async def publish_youtube_stub(self, project_id: int, user_id: int) -> dict:
         project = await self._ensure_owner(project_id, user_id)
-        if project.workflow_status != WorkflowStatus.COMPLETED:
-            raise InvalidProjectStatus(
-                current=project.workflow_status.value,
-                required=WorkflowStatus.COMPLETED.value,
-            )
+        self._guard_completed(project)
         result = await self.youtube.upload(
             video_url=project.video_url or "",
             title=project.title or "",

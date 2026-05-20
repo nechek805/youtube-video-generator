@@ -21,12 +21,18 @@ class ProjectCreate(BaseModel):
         return v
 
 
-class PromptApprove(BaseModel):
-    edited_prompt: str | None = None  # None → accept generated_prompt as-is
+class PromptEdit(BaseModel):
+    edited_prompt: str
 
-
-class VideoApprove(BaseModel):
-    approved: bool
+    @field_validator("edited_prompt")
+    @classmethod
+    def validate_edited_prompt(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 1:
+            raise ValueError("edited_prompt cannot be empty")
+        if len(v) > 5000:
+            raise ValueError("edited_prompt must be at most 5000 characters")
+        return v
 
 
 class MetadataApprove(BaseModel):

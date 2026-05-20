@@ -2,17 +2,23 @@
 
 A single compiled graph with seven nodes covers the full producer flow:
 
-    generate_prompt → wait_for_prompt_approval
-    generate_video → wait_for_video_approval
-    generate_metadata → wait_for_metadata_approval
+    generate_prompt -> wait_for_prompt_approval
+    generate_video -> wait_for_video_approval
+    generate_metadata -> wait_for_metadata_approval
     finalize_project
 
-Every user-driven action (create / approve / reject / regenerate / edit) is
-expressed as a fresh invocation that enters at a conditional router and lands
-on the right node. Each "doing" node persists its outputs to the database
-before yielding control, so workflow progress is durable across requests and
-process restarts — the database is the source of truth, not in-memory graph
-state.
+The frontend controls every transition explicitly: each user HTTP request
+invokes the graph once with a specific action, the conditional router at
+START dispatches it to the right node, and the graph runs to END. Each
+"doing" node persists its outputs to the database before yielding control,
+so workflow progress is durable across requests and process restarts -- the
+database is the source of truth, not in-memory graph state.
+
+The "wait" nodes do double duty: they are terminal parks AND, when entered
+as a phase transition (from a different workflow_status), they initialize
+the next phase's status to PENDING. This lets approve_prompt / approve_video
+be routed straight to the corresponding wait node without a separate
+"transition" node.
 """
 from datetime import datetime, timezone
 from typing import Literal, TypedDict
@@ -34,30 +40,25 @@ from src.video.services.video_generator import VideoGeneratorService
 
 
 WorkflowAction = Literal[
-    "create",
-    "regenerate_prompt",
-    "approve_prompt",
-    "approve_video",
-    "reject_video",
-    "approve_metadata",
+    "generate_prompt",    # runs LLM (also serves as "regenerate")
+    "approve_prompt",     # phase transition PROMPT -> VIDEO
+    "generate_video",     # runs video generator
+    "approve_video",      # phase transition VIDEO -> METADATA
+    "reject_video",       # phase transition VIDEO -> PROMPT
+    "generate_metadata",  # runs metadata LLM
+    "finalize",           # phase transition METADATA -> COMPLETED
 ]
 
 
 class WorkflowState(TypedDict, total=False):
     """State carried through the graph.
 
-    ``project_id`` and ``action`` are always set. Other keys are inputs for
-    specific actions and are passed through as-is to the relevant nodes.
+    ``project_id`` and ``action`` are always set. The graph reads other
+    fields from the database via the repo -- the state itself is minimal.
     """
 
     project_id: int
     action: WorkflowAction
-
-    # Inputs for specific actions
-    topic: str
-    edited_prompt: str | None
-    edited_title: str | None
-    edited_description: str | None
 
 
 def _now() -> datetime:
@@ -73,7 +74,7 @@ def build_workflow_graph(
     """Compile the unified video workflow graph with injected services.
 
     The graph is rebuilt per request because ``repo`` is bound to a single
-    AsyncSession. This is cheap — graph construction is pure Python with no
+    AsyncSession. This is cheap -- graph construction is pure Python with no
     IO.
     """
 
@@ -86,16 +87,13 @@ def build_workflow_graph(
         if project is None:
             raise VideoGenerationFailed(f"Project {state['project_id']} not found")
 
-        topic = state.get("topic") or project.topic
-
         project.prompt_status = PromptStatus.PENDING
-        project.workflow_status = WorkflowStatus.PROMPT
         project.error_message = None
         project.updated_at = _now()
         await repo.update_project(project)
 
         try:
-            prompt_text = await llm.generate_video_prompt(topic)
+            prompt_text = await llm.generate_video_prompt(project.topic)
         except Exception as exc:
             project.prompt_status = PromptStatus.FAILED
             project.workflow_status = WorkflowStatus.FAILED
@@ -130,13 +128,10 @@ def build_workflow_graph(
         return state
 
     async def generate_video(state: WorkflowState) -> WorkflowState:
+        """Run the video generator. Assumes workflow_status is already VIDEO."""
         project = await repo.get_project_by_id(state["project_id"])
         if project is None:
             raise VideoGenerationFailed(f"Project {state['project_id']} not found")
-
-        edited = (state.get("edited_prompt") or "").strip()
-        if edited:
-            project.edited_prompt = edited
 
         active_prompt = project.edited_prompt or project.generated_prompt
         if not active_prompt:
@@ -147,7 +142,6 @@ def build_workflow_graph(
             await repo.update_project(project)
             raise VideoGenerationFailed(project.error_message)
 
-        project.workflow_status = WorkflowStatus.VIDEO
         project.video_status = VideoStatus.GENERATING
         project.video_url = None
         project.error_message = None
@@ -188,7 +182,7 @@ def build_workflow_graph(
                 project.id, result.provider, step.id,
             )
         else:
-            # Async provider — the project stays in GENERATING until a
+            # Async provider -- the project stays in GENERATING until a
             # background worker (or a follow-up status check) finishes it.
             logger.info(
                 "Video generation dispatched for project %d (provider=%s, job=%s)",
@@ -200,16 +194,28 @@ def build_workflow_graph(
         return state
 
     async def wait_for_video_approval(state: WorkflowState) -> WorkflowState:
-        """Park the project in VIDEO phase awaiting user approval."""
+        """Park the project in VIDEO phase.
+
+        Triggered by ``"approve_prompt"`` (transition from PROMPT) or as the
+        terminal of the ``generate_video`` path. When entering from a
+        different workflow_status, initializes video_status to PENDING.
+        """
         project = await repo.get_project_by_id(state["project_id"])
-        if project and project.workflow_status != WorkflowStatus.VIDEO:
+        if project is None:
+            return state
+
+        if project.workflow_status != WorkflowStatus.VIDEO:
+            # Phase transition PROMPT -> VIDEO (via approve_prompt)
             project.workflow_status = WorkflowStatus.VIDEO
+            project.video_status = VideoStatus.PENDING
+            project.video_url = None
+            project.error_message = None
             project.updated_at = _now()
             await repo.update_project(project)
         return state
 
     async def reject_video(state: WorkflowState) -> WorkflowState:
-        """User rejected the video — reset video phase and return to prompt review."""
+        """User rejected the video -- reset video phase and return to prompt review."""
         project = await repo.get_project_by_id(state["project_id"])
         if project is None:
             return state
@@ -229,16 +235,11 @@ def build_workflow_graph(
         return state
 
     async def generate_metadata(state: WorkflowState) -> WorkflowState:
+        """Run the metadata LLM. Assumes workflow_status is already METADATA."""
         project = await repo.get_project_by_id(state["project_id"])
         if project is None:
             raise VideoGenerationFailed(f"Project {state['project_id']} not found")
 
-        latest = await repo.get_latest_step(project.id)
-        if latest:
-            latest.is_approved = True
-            await repo.update_step(latest)
-
-        project.workflow_status = WorkflowStatus.METADATA
         project.metadata_status = MetadataStatus.PENDING
         project.error_message = None
         project.updated_at = _now()
@@ -267,25 +268,44 @@ def build_workflow_graph(
         return state
 
     async def wait_for_metadata_approval(state: WorkflowState) -> WorkflowState:
-        """Park the project in METADATA phase awaiting final approval."""
+        """Park the project in METADATA phase.
+
+        Triggered by ``"approve_video"`` (transition from VIDEO) or as the
+        terminal of the ``generate_metadata`` path. When entering from a
+        different workflow_status, initializes metadata_status to PENDING
+        and marks the latest video step as approved.
+        """
         project = await repo.get_project_by_id(state["project_id"])
-        if project and project.workflow_status != WorkflowStatus.METADATA:
+        if project is None:
+            return state
+
+        if project.workflow_status != WorkflowStatus.METADATA:
+            # Phase transition VIDEO -> METADATA (via approve_video)
             project.workflow_status = WorkflowStatus.METADATA
+            project.metadata_status = MetadataStatus.PENDING
+            project.title = None
+            project.description = None
+            project.error_message = None
+
+            latest = await repo.get_latest_step(project.id)
+            if latest:
+                latest.is_approved = True
+                await repo.update_step(latest)
+
             project.updated_at = _now()
             await repo.update_project(project)
         return state
 
     async def finalize_project(state: WorkflowState) -> WorkflowState:
+        """Transition the project to COMPLETED.
+
+        Edits to title/description are saved by the ``approve_metadata``
+        service method (which bypasses the graph), so this node only does
+        the final state transition.
+        """
         project = await repo.get_project_by_id(state["project_id"])
         if project is None:
             raise VideoGenerationFailed(f"Project {state['project_id']} not found")
-
-        edited_title = (state.get("edited_title") or "").strip()
-        if edited_title:
-            project.title = edited_title
-        edited_description = (state.get("edited_description") or "").strip()
-        if edited_description:
-            project.description = edited_description
 
         project.workflow_status = WorkflowStatus.COMPLETED
         project.updated_at = _now()
@@ -299,15 +319,19 @@ def build_workflow_graph(
 
     def route_action(state: WorkflowState) -> str:
         action = state.get("action")
-        if action in ("create", "regenerate_prompt"):
+        if action == "generate_prompt":
             return "generate_prompt"
         if action == "approve_prompt":
+            return "wait_for_video_approval"
+        if action == "generate_video":
             return "generate_video"
         if action == "approve_video":
-            return "generate_metadata"
+            return "wait_for_metadata_approval"
         if action == "reject_video":
             return "reject_video"
-        if action == "approve_metadata":
+        if action == "generate_metadata":
+            return "generate_metadata"
+        if action == "finalize":
             return "finalize_project"
         raise ValueError(f"Unknown workflow action: {action!r}")
 
@@ -326,15 +350,17 @@ def build_workflow_graph(
     graph.add_node("wait_for_metadata_approval", wait_for_metadata_approval)
     graph.add_node("finalize_project", finalize_project)
 
-    # Single conditional router from START — handles every user action.
+    # Single conditional router from START -- handles every user action.
     graph.add_conditional_edges(
         START,
         route_action,
         {
             "generate_prompt": "generate_prompt",
+            "wait_for_video_approval": "wait_for_video_approval",
             "generate_video": "generate_video",
-            "generate_metadata": "generate_metadata",
+            "wait_for_metadata_approval": "wait_for_metadata_approval",
             "reject_video": "reject_video",
+            "generate_metadata": "generate_metadata",
             "finalize_project": "finalize_project",
         },
     )
@@ -343,7 +369,7 @@ def build_workflow_graph(
     graph.add_edge("generate_prompt", "wait_for_prompt_approval")
     graph.add_edge("wait_for_prompt_approval", END)
 
-    # Phase 2: video — reject loops back to prompt review
+    # Phase 2: video -- reject loops back to prompt review
     graph.add_edge("generate_video", "wait_for_video_approval")
     graph.add_edge("wait_for_video_approval", END)
     graph.add_edge("reject_video", "wait_for_prompt_approval")
