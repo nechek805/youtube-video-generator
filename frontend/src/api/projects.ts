@@ -19,6 +19,11 @@ export const approvePrompt = (id: number, editedPrompt?: string | null) =>
     body: JSON.stringify({ edited_prompt: editedPrompt ?? null }),
   })
 
+export const regeneratePrompt = (id: number) =>
+  apiFetch<Project>(`/video/projects/${id}/regenerate-prompt`, {
+    method: 'POST',
+  })
+
 export const getGenerationStatus = (id: number) =>
   apiFetch<GenerationStatus>(`/video/projects/${id}/generation-status`)
 
