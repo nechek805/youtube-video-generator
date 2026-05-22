@@ -7,5 +7,7 @@ export function useApproveMetadata(projectId: number) {
     mutationFn: ({ title, description }: { title?: string | null; description?: string | null }) =>
       approveMetadata(projectId, title, description),
     onSuccess: (data) => queryClient.setQueryData(['project', projectId], data),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 }

@@ -6,5 +6,7 @@ export function useRegeneratePrompt(projectId: number) {
   return useMutation({
     mutationFn: () => regeneratePrompt(projectId),
     onSuccess: (data) => queryClient.setQueryData(['project', projectId], data),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 }
