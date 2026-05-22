@@ -130,9 +130,18 @@ PROMPT_PENDING → PROMPT_READY → VIDEO_GENERATING → VIDEO_READY → METADAT
 | `OPENAI_API_KEY` | OpenAI key for LangGraph LLM calls |
 | `OPENAI_MODEL` | Model name (default: gpt-4o-mini) |
 | `MOCK_VIDEO_CDN_BASE` | Base URL for mock video files |
+| `VIDEO_PROVIDER` | Active video provider: `mock` (default), `runway`, `pika`, `luma`, `kling` |
+| `MOCK_VIDEO_MODE` | Mock-only: `placeholder` (default) or `static` (serves `/static/sample.mp4`) |
+| `RUNWAY_API_KEY` / `PIKA_API_KEY` / `LUMA_API_KEY` / `KLING_API_KEY` | Reserved for future provider integrations |
 | `RESEND_API_KEY` | Resend email API key |
 | `BASE_URL` | Public API URL (used in confirmation links) |
 | `ORIGINS` | JSON array of allowed CORS origins |
+
+## Video Providers
+
+Provider classes live in `backend/src/video/services/video_providers/` — one file per provider, each subclassing `VideoProvider` (in `base.py`). The active provider is selected by the `VIDEO_PROVIDER` env var and built by `factory.get_video_provider()`. Adding a real provider is a single-file change: implement `async generate(...)` and wire it into the factory.
+
+Only `mock` is wired up today; Runway/Pika/Luma/Kling subclasses exist as stubs that raise `NotImplementedError`.
 
 ## Database Migrations
 
