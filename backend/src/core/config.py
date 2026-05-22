@@ -39,5 +39,23 @@ class __Config:
     def get_mock_video_cdn_base(self) -> str:
         return os.getenv("MOCK_VIDEO_CDN_BASE", "https://mock-cdn.example.com/videos")
 
+    def get_video_provider(self) -> str:
+        return os.getenv("VIDEO_PROVIDER", "mock")
+
+    def get_mock_video_mode(self) -> str:
+        return os.getenv("MOCK_VIDEO_MODE", "placeholder")
+
+    def get_runway_api_key(self) -> str:
+        return os.getenv("RUNWAY_API_KEY", "")
+
+    def get_pika_api_key(self) -> str:
+        return os.getenv("PIKA_API_KEY", "")
+
+    def get_luma_api_key(self) -> str:
+        return os.getenv("LUMA_API_KEY", "")
+
+    def get_kling_api_key(self) -> str:
+        return os.getenv("KLING_API_KEY", "")
+
 
 config = __Config()

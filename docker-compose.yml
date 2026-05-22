@@ -21,6 +21,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +62,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +103,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

@@ -30,7 +30,7 @@ from src.video.models import (
 )
 from src.video.repository import VideoRepository
 from src.video.services.llm import LLMService
-from src.video.services.video_generator import VideoGeneratorService
+from src.video.services.video_providers import VideoProvider as VideoGeneratorService
 
 
 WorkflowAction = Literal[

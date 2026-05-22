@@ -8,27 +8,28 @@ internal layout. To add a new provider:
   3. Add its API key getter to ``src/core/config.py``.
 """
 from .base import VideoProvider, VideoResult
+from .factory import get_video_provider
+from .kling import KlingProvider
+from .luma import LumaProvider
 from .mock import MockVideoProvider
+from .pika import PikaProvider
+from .runway import RunwayProvider
 
 # Legacy aliases so existing imports keep working during the package split.
 VideoGeneratorService = VideoProvider
 MockVideoGenerator = MockVideoProvider
-
-
-def get_video_generator() -> VideoProvider:
-    """Legacy factory name; returns the mock provider directly.
-
-    The env-var-driven factory lands in commit 3 and replaces this with
-    ``get_video_provider``. Keeping this here so workflow.py and service.py
-    can be updated in a later commit.
-    """
-    return MockVideoProvider()
+get_video_generator = get_video_provider
 
 
 __all__ = [
     "VideoProvider",
     "VideoResult",
     "MockVideoProvider",
+    "RunwayProvider",
+    "PikaProvider",
+    "LumaProvider",
+    "KlingProvider",
+    "get_video_provider",
     # legacy aliases
     "VideoGeneratorService",
     "MockVideoGenerator",

@@ -19,7 +19,7 @@ from src.video.models import (
 from src.video.repository import VideoRepository
 from src.video.schemas import GenerationStatusRead
 from src.video.services.llm import LLMService
-from src.video.services.video_generator import get_video_generator
+from src.video.services.video_providers import get_video_provider
 from src.video.services.youtube import YouTubeUploader
 from src.video.workflow import build_workflow_graph
 
@@ -42,7 +42,7 @@ class VideoService:
         self.db = db
         self.repo = VideoRepository(db)
         self.llm = LLMService()
-        self.video_gen = get_video_generator()
+        self.video_gen = get_video_provider()
         self.youtube = YouTubeUploader()
         self.graph = build_workflow_graph(
             repo=self.repo,
