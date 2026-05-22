@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { publishYouTubeStub } from '../api/projects'
 import { ErrorMessage } from '../components/ErrorMessage'
 import { Layout } from '../components/Layout'
@@ -14,6 +14,10 @@ import { useApproveVideo } from '../hooks/useApproveVideo'
 import { useGenerationStatus } from '../hooks/useGenerationStatus'
 import { useProject } from '../hooks/useProject'
 import { useRegeneratePrompt } from '../hooks/useRegeneratePrompt'
+import {
+  workflowStatusColor,
+  workflowStatusLabel,
+} from '../lib/projectStatus'
 import type { Project } from '../types/project'
 
 function ProjectView({ project }: { project: Project }) {
@@ -56,8 +60,13 @@ function ProjectView({ project }: { project: Project }) {
   return (
     <Layout>
       <div className="max-w-2xl">
-        <div className="mb-4">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900 truncate">{project.topic}</h1>
+          <span
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${workflowStatusColor(ws)}`}
+          >
+            {workflowStatusLabel(ws)}
+          </span>
         </div>
 
         <StepIndicator status={ws} />
@@ -321,7 +330,15 @@ export function ProjectPage() {
   if (error)
     return (
       <Layout>
-        <ErrorMessage message={(error as Error).message} />
+        <div className="space-y-4">
+          <ErrorMessage message={(error as Error).message} />
+          <Link
+            to="/"
+            className="inline-block text-sm text-indigo-600 hover:underline"
+          >
+            ← Back to projects
+          </Link>
+        </div>
       </Layout>
     )
   if (!project) return null
