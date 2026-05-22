@@ -3,6 +3,7 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -53,6 +54,9 @@ if config.get_https_redirect():
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(video_router)
+
+# Serve files placed under backend/static (e.g. mock video samples).
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/")
