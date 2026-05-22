@@ -13,25 +13,45 @@ import { useApprovePrompt } from '../hooks/useApprovePrompt'
 import { useApproveVideo } from '../hooks/useApproveVideo'
 import { useGenerationStatus } from '../hooks/useGenerationStatus'
 import { useProject } from '../hooks/useProject'
+import { useRegeneratePrompt } from '../hooks/useRegeneratePrompt'
 import type { Project } from '../types/project'
 
 function ProjectView({ project }: { project: Project }) {
   const approvePrompt = useApprovePrompt(project.id)
+  const regeneratePrompt = useRegeneratePrompt(project.id)
   const approveVideo = useApproveVideo(project.id)
   const approveMetadata = useApproveMetadata(project.id)
 
-  const [editedPrompt, setEditedPrompt] = useState(project.generated_prompt ?? '')
-  const [editedTitle, setEditedTitle] = useState(project.youtube_title ?? '')
-  const [editedDesc, setEditedDesc] = useState(project.youtube_description ?? '')
+  const [editedPrompt, setEditedPrompt] = useState(
+    project.edited_prompt ?? project.generated_prompt ?? '',
+  )
+  const [editedTitle, setEditedTitle] = useState(project.title ?? '')
+  const [editedDesc, setEditedDesc] = useState(project.description ?? '')
   const [publishMsg, setPublishMsg] = useState<string | null>(null)
 
-  const isGenerating = project.status === 'VIDEO_GENERATING'
-  useGenerationStatus(project.id, isGenerating)
+  const ws = project.workflow_status
+  const ps = project.prompt_status
+  const vs = project.video_status
+  const ms = project.metadata_status
 
-  const latestGeneration = project.generations[project.generations.length - 1] ?? null
+  useGenerationStatus(project.id, ws === 'VIDEO' && vs === 'GENERATING')
 
   const mutError =
-    (approvePrompt.error || approveVideo.error || approveMetadata.error) as Error | null
+    (approvePrompt.error ||
+      regeneratePrompt.error ||
+      approveVideo.error ||
+      approveMetadata.error) as Error | null
+
+  const busy =
+    approvePrompt.isPending ||
+    regeneratePrompt.isPending ||
+    approveVideo.isPending ||
+    approveMetadata.isPending
+
+  const handlePublish = async () => {
+    const res = await publishYouTubeStub(project.id)
+    setPublishMsg(res.message)
+  }
 
   return (
     <Layout>
@@ -40,113 +60,196 @@ function ProjectView({ project }: { project: Project }) {
           <h1 className="text-xl font-semibold text-gray-900 truncate">{project.topic}</h1>
         </div>
 
-        <StepIndicator status={project.status} />
+        <StepIndicator status={ws} />
 
-        {mutError && <div className="mb-4"><ErrorMessage message={mutError.message} /></div>}
+        {mutError && (
+          <div className="mb-4">
+            <ErrorMessage message={mutError.message} />
+          </div>
+        )}
 
-        {/* Step 1: PROMPT_PENDING */}
-        {project.status === 'PROMPT_PENDING' && (
+        {/* Workflow-level failure */}
+        {ws === 'FAILED' && (
+          <div className="space-y-4">
+            <ErrorMessage
+              message={project.error_message ?? 'The workflow failed. Please try again.'}
+            />
+            <p className="text-sm text-gray-500">
+              You can try regenerating the prompt to restart the workflow.
+            </p>
+            <button
+              onClick={() => regeneratePrompt.mutate()}
+              disabled={busy}
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              Restart from prompt
+            </button>
+          </div>
+        )}
+
+        {/* Phase 1: PROMPT */}
+        {ws === 'PROMPT' && ps === 'PENDING' && (
           <Spinner label="Generating your video prompt…" />
         )}
 
-        {/* Step 2: PROMPT_READY */}
-        {project.status === 'PROMPT_READY' && (
+        {ws === 'PROMPT' && ps === 'FAILED' && (
+          <div className="space-y-4">
+            <ErrorMessage
+              message={project.error_message ?? 'Prompt generation failed.'}
+            />
+            <button
+              onClick={() => regeneratePrompt.mutate()}
+              disabled={busy}
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {regeneratePrompt.isPending ? 'Generating…' : 'Try again'}
+            </button>
+          </div>
+        )}
+
+        {ws === 'PROMPT' && ps === 'READY' && (
           <div className="space-y-4">
             <h2 className="font-medium text-gray-800">Review Your Video Prompt</h2>
             <p className="text-sm text-gray-500">
               Edit the prompt if needed, then approve to start video generation.
             </p>
             <PromptEditor
-              defaultValue={project.generated_prompt ?? ''}
+              defaultValue={project.edited_prompt ?? project.generated_prompt ?? ''}
               onChange={setEditedPrompt}
-              disabled={approvePrompt.isPending}
+              disabled={busy}
             />
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => approvePrompt.mutate(null)}
-                disabled={approvePrompt.isPending}
+                disabled={busy}
                 className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
               >
-                {approvePrompt.isPending ? 'Starting…' : 'Approve & Generate Video'}
+                {approvePrompt.isPending ? 'Starting…' : 'Approve & Continue'}
               </button>
               <button
                 onClick={() => approvePrompt.mutate(editedPrompt)}
-                disabled={approvePrompt.isPending}
+                disabled={busy}
                 className="rounded-lg border border-indigo-600 px-5 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-60"
               >
-                Use Edited Prompt
+                Edit & Approve
+              </button>
+              <button
+                onClick={() => regeneratePrompt.mutate()}
+                disabled={busy}
+                className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
+              >
+                {regeneratePrompt.isPending ? 'Regenerating…' : 'Regenerate'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 3: VIDEO_GENERATING */}
-        {project.status === 'VIDEO_GENERATING' && (
-          <Spinner label="Generating your video… this takes about 5 seconds." />
+        {/* Phase 2: VIDEO */}
+        {ws === 'VIDEO' && vs === 'GENERATING' && (
+          <Spinner label="Generating your video…" />
         )}
 
-        {/* Step 4: VIDEO_READY */}
-        {project.status === 'VIDEO_READY' && (
+        {ws === 'VIDEO' && vs === 'PENDING' && (
+          <Spinner label="Preparing video generation…" />
+        )}
+
+        {ws === 'VIDEO' && vs === 'FAILED' && (
+          <div className="space-y-4">
+            <ErrorMessage
+              message={project.error_message ?? 'Video generation failed.'}
+            />
+            <p className="text-sm text-gray-500">
+              You can retry from the current prompt or go back to edit it.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => approvePrompt.mutate(null)}
+                disabled={busy}
+                className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {ws === 'VIDEO' && vs === 'READY' && (
           <div className="space-y-4">
             <h2 className="font-medium text-gray-800">Review Your Video</h2>
-            <VideoPlayer url={latestGeneration?.video_url ?? null} />
-            <div className="flex gap-3">
+            <VideoPlayer url={project.video_url} />
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => approveVideo.mutate(true)}
-                disabled={approveVideo.isPending}
+                disabled={busy}
                 className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
               >
                 {approveVideo.isPending ? 'Processing…' : 'Approve Video'}
               </button>
               <button
                 onClick={() => approveVideo.mutate(false)}
-                disabled={approveVideo.isPending}
+                disabled={busy}
                 className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-60"
               >
-                Reject & Edit Prompt
+                Reject &amp; Re-edit Prompt
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 5: METADATA_PENDING */}
-        {project.status === 'METADATA_PENDING' && (
+        {/* Phase 3: METADATA */}
+        {ws === 'METADATA' && ms === 'PENDING' && (
           <Spinner label="Writing YouTube title and description…" />
         )}
 
-        {/* Step 5: METADATA_READY */}
-        {project.status === 'METADATA_READY' && (
+        {ws === 'METADATA' && ms === 'FAILED' && (
+          <div className="space-y-4">
+            <ErrorMessage
+              message={project.error_message ?? 'Metadata generation failed.'}
+            />
+            <button
+              onClick={() => approveVideo.mutate(true)}
+              disabled={busy}
+              className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {ws === 'METADATA' && ms === 'READY' && (
           <div className="space-y-4">
             <h2 className="font-medium text-gray-800">Review YouTube Metadata</h2>
             <p className="text-sm text-gray-500">Edit the title and description if needed.</p>
             <MetadataEditor
-              defaultTitle={project.youtube_title ?? ''}
-              defaultDescription={project.youtube_description ?? ''}
+              defaultTitle={project.title ?? ''}
+              defaultDescription={project.description ?? ''}
               onChangeTitle={setEditedTitle}
               onChangeDescription={setEditedDesc}
-              disabled={approveMetadata.isPending}
+              disabled={busy}
             />
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => approveMetadata.mutate({ title: null, description: null })}
-                disabled={approveMetadata.isPending}
+                disabled={busy}
                 className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
               >
-                {approveMetadata.isPending ? 'Saving…' : 'Approve Metadata'}
+                {approveMetadata.isPending ? 'Finalizing…' : 'Finalize'}
               </button>
               <button
-                onClick={() => approveMetadata.mutate({ title: editedTitle, description: editedDesc })}
-                disabled={approveMetadata.isPending}
+                onClick={() =>
+                  approveMetadata.mutate({ title: editedTitle, description: editedDesc })
+                }
+                disabled={busy}
                 className="rounded-lg border border-indigo-600 px-5 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-60"
               >
-                Use Edited Metadata
+                Edit &amp; Finalize
               </button>
             </div>
           </div>
         )}
 
-        {/* Step 6: COMPLETED */}
-        {project.status === 'COMPLETED' && (
+        {/* Final */}
+        {ws === 'COMPLETED' && (
           <div className="space-y-6">
             <div className="rounded-xl border border-green-200 bg-green-50 p-4">
               <p className="font-medium text-green-800">Your video project is complete!</p>
@@ -154,10 +257,10 @@ function ProjectView({ project }: { project: Project }) {
 
             <div>
               <h2 className="mb-2 font-medium text-gray-800">Final Video</h2>
-              <VideoPlayer url={latestGeneration?.video_url ?? null} />
-              {latestGeneration?.video_url && (
+              <VideoPlayer url={project.video_url} />
+              {project.video_url && (
                 <a
-                  href={latestGeneration.video_url}
+                  href={project.video_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-block text-sm text-indigo-600 hover:underline"
@@ -170,37 +273,32 @@ function ProjectView({ project }: { project: Project }) {
             <div className="space-y-2">
               <h2 className="font-medium text-gray-800">YouTube Title</h2>
               <p className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
-                {project.final_title}
+                {project.title}
               </p>
             </div>
 
             <div className="space-y-2">
               <h2 className="font-medium text-gray-800">YouTube Description</h2>
               <pre className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-white p-3 text-sm font-sans">
-                {project.final_description}
+                {project.description}
               </pre>
             </div>
 
             <div className="space-y-2">
               <h2 className="font-medium text-gray-800">Video Prompt Used</h2>
               <pre className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono text-gray-600">
-                {project.final_prompt}
+                {project.edited_prompt ?? project.generated_prompt}
               </pre>
             </div>
 
             <div>
               <button
-                onClick={async () => {
-                  const res = await publishYouTubeStub(project.id)
-                  setPublishMsg(res.message)
-                }}
+                onClick={handlePublish}
                 className="rounded-lg border border-red-500 px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
               >
                 Publish to YouTube (stub)
               </button>
-              {publishMsg && (
-                <p className="mt-2 text-sm text-gray-500">{publishMsg}</p>
-              )}
+              {publishMsg && <p className="mt-2 text-sm text-gray-500">{publishMsg}</p>}
             </div>
           </div>
         )}
@@ -214,8 +312,18 @@ export function ProjectPage() {
   const projectId = Number(id)
   const { data: project, isLoading, error } = useProject(projectId)
 
-  if (isLoading) return <Layout><Spinner label="Loading project…" /></Layout>
-  if (error) return <Layout><ErrorMessage message={(error as Error).message} /></Layout>
+  if (isLoading)
+    return (
+      <Layout>
+        <Spinner label="Loading project…" />
+      </Layout>
+    )
+  if (error)
+    return (
+      <Layout>
+        <ErrorMessage message={(error as Error).message} />
+      </Layout>
+    )
   if (!project) return null
 
   return <ProjectView project={project} />
