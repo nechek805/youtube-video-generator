@@ -3,27 +3,11 @@ import { ErrorMessage } from '../components/ErrorMessage'
 import { Layout } from '../components/Layout'
 import { Spinner } from '../components/Spinner'
 import { useProjects } from '../hooks/useProjects'
-import type { ProjectStatus } from '../types/project'
-
-const STATUS_LABEL: Record<ProjectStatus, string> = {
-  PROMPT_PENDING: 'Generating prompt…',
-  PROMPT_READY: 'Awaiting prompt approval',
-  VIDEO_GENERATING: 'Generating video…',
-  VIDEO_READY: 'Awaiting video approval',
-  METADATA_PENDING: 'Generating metadata…',
-  METADATA_READY: 'Awaiting metadata approval',
-  COMPLETED: 'Completed',
-}
-
-const STATUS_COLOR: Record<ProjectStatus, string> = {
-  PROMPT_PENDING: 'bg-yellow-100 text-yellow-700',
-  PROMPT_READY: 'bg-blue-100 text-blue-700',
-  VIDEO_GENERATING: 'bg-yellow-100 text-yellow-700',
-  VIDEO_READY: 'bg-blue-100 text-blue-700',
-  METADATA_PENDING: 'bg-yellow-100 text-yellow-700',
-  METADATA_READY: 'bg-blue-100 text-blue-700',
-  COMPLETED: 'bg-green-100 text-green-700',
-}
+import {
+  hasPhaseFailure,
+  workflowStatusColor,
+  workflowStatusLabel,
+} from '../lib/projectStatus'
 
 export function DashboardPage() {
   const { data: projects, isLoading, error } = useProjects()
@@ -57,26 +41,39 @@ export function DashboardPage() {
 
       {projects && projects.length > 0 && (
         <ul className="space-y-3">
-          {projects.map((p) => (
-            <li key={p.id}>
-              <Link
-                to={`/projects/${p.id}`}
-                className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
-              >
-                <div>
-                  <p className="font-medium text-gray-900">{p.topic}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {new Date(p.updated_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLOR[p.status]}`}
+          {projects.map((p) => {
+            const failed = p.workflow_status === 'FAILED'
+            const needsAttention =
+              !failed &&
+              hasPhaseFailure(p.prompt_status, p.video_status, p.metadata_status)
+            return (
+              <li key={p.id}>
+                <Link
+                  to={`/projects/${p.id}`}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 hover:border-indigo-300 hover:shadow-sm transition-all"
                 >
-                  {STATUS_LABEL[p.status]}
-                </span>
-              </Link>
-            </li>
-          ))}
+                  <div>
+                    <p className="font-medium text-gray-900">{p.topic}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {new Date(p.updated_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {needsAttention && (
+                      <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700">
+                        needs attention
+                      </span>
+                    )}
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${workflowStatusColor(p.workflow_status)}`}
+                    >
+                      {workflowStatusLabel(p.workflow_status)}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       )}
     </Layout>
