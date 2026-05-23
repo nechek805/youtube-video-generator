@@ -28,6 +28,15 @@ class LLMService:
         "audiences. Return only the prompt text with no extra commentary."
     )
 
+    _IMPROVE_SYSTEM = (
+        "You are a YouTube video production consultant. "
+        "You will be given the original video topic and the user's feedback on a "
+        "previously-generated prompt. Produce an improved 150–300 word video "
+        "generation prompt that incorporates the feedback while preserving the "
+        "original topic's intent. Keep the content professional and suitable for "
+        "general audiences. Return only the prompt text with no extra commentary."
+    )
+
     _TITLE_SYSTEM = (
         "You are a YouTube SEO specialist. "
         "Given a video generation prompt, write one compelling YouTube video title "
@@ -107,6 +116,23 @@ class LLMService:
         return await self._chat(
             self._PROMPT_SYSTEM, f"Video topic: {topic}",
         )
+
+    async def improve_video_prompt(self, topic: str, user_feedback: str) -> str:
+        """Revise a previously-generated prompt using the user's feedback.
+
+        ``user_feedback`` is free-form text describing what should change
+        (tone, pacing, content, length, etc.).
+        """
+        if self.is_mock:
+            return (
+                f"{self._mock_video_prompt(topic)}\n\n"
+                f"[Revised per user feedback: {user_feedback.strip()[:200]}]"
+            )
+        user_message = (
+            f"Original topic: {topic}\n\n"
+            f"User feedback on the previous prompt:\n{user_feedback}"
+        )
+        return await self._chat(self._IMPROVE_SYSTEM, user_message)
 
     async def generate_youtube_title(self, prompt: str) -> str:
         if self.is_mock:
