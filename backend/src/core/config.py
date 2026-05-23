@@ -36,6 +36,10 @@ class __Config:
     def get_openai_model(self) -> str:
         return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+    def get_llm_provider(self) -> str:
+        """Active LLM provider: 'openai' (default) or 'mock' for offline dev."""
+        return os.getenv("LLM_PROVIDER", "openai")
+
     def get_mock_video_cdn_base(self) -> str:
         return os.getenv("MOCK_VIDEO_CDN_BASE", "https://mock-cdn.example.com/videos")
 
