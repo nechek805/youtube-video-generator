@@ -33,6 +33,7 @@ export interface Project {
 
   title: string | null
   description: string | null
+  tags: string[] | null
   metadata_status: MetadataStatus
 
   workflow_status: WorkflowStatus

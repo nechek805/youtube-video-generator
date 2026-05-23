@@ -127,7 +127,8 @@ PROMPT_PENDING → PROMPT_READY → VIDEO_GENERATING → VIDEO_READY → METADAT
 | `CELERY_BROKER_URL` | Redis DSN (db 1) |
 | `CELERY_RESULT_BACKEND` | Redis DSN (db 2) |
 | `REDIS_URL` | Redis DSN (db 0) |
-| `OPENAI_API_KEY` | OpenAI key for LangGraph LLM calls |
+| `LLM_PROVIDER` | LLM provider: `openai` (default) or `mock` (auto when no API key) |
+| `OPENAI_API_KEY` | OpenAI key for LangGraph LLM calls (empty → mock fallback) |
 | `OPENAI_MODEL` | Model name (default: gpt-4o-mini) |
 | `MOCK_VIDEO_CDN_BASE` | Base URL for mock video files |
 | `VIDEO_PROVIDER` | Active video provider: `mock` (default), `runway`, `pika`, `luma`, `kling` |

@@ -56,6 +56,22 @@ export function CompletedStep({ project }: { project: Project }) {
         </pre>
       </div>
 
+      {project.tags && project.tags.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="font-medium text-gray-800">Tags</h2>
+          <div className="flex flex-wrap gap-2">
+            {project.tags.map((t) => (
+              <span
+                key={t}
+                className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <h2 className="font-medium text-gray-800">Video Prompt Used</h2>
         <pre className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs font-mono text-gray-600">
