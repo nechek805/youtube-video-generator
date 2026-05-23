@@ -64,6 +64,7 @@ class ProjectRead(BaseModel):
 
     title: str | None
     description: str | None
+    tags: list[str] | None
     metadata_status: str
 
     workflow_status: str
