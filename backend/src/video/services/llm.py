@@ -10,11 +10,21 @@ Provider selection:
 The mock responses are intentionally simple but professional-sounding so
 they don't trip the workflow's "prompt too short" guard.
 """
+import json
+import re
+from typing import TypedDict
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.core.config import config
 from src.logger import logger
+
+
+class YouTubeMetadata(TypedDict):
+    title: str
+    description: str
+    tags: list[str]
 
 
 class LLMService:
@@ -51,6 +61,18 @@ class LLMService:
         "with relevant keywords and a clear call-to-action. "
         "Keep the tone professional and brand-safe. "
         "Return only the description text with no extra commentary."
+    )
+
+    _METADATA_SYSTEM = (
+        "You are a YouTube SEO and content strategist. "
+        "Given a video topic and its detailed generation prompt, produce YouTube "
+        "metadata as a single JSON object with three keys: "
+        '"title" (string, under 70 characters, SEO-friendly, no clickbait), '
+        '"description" (string, 150-300 words, includes relevant keywords and a '
+        'clear call-to-action), and '
+        '"tags" (array of 5-12 lowercase string tags, no leading "#"). '
+        "Keep everything family-friendly and brand-safe. "
+        "Return ONLY the JSON object, no surrounding text or markdown fences."
     )
 
     def __init__(self, *, temperature: float = 0.7) -> None:
@@ -154,3 +176,69 @@ class LLMService:
             self._DESCRIPTION_SYSTEM,
             f"Video title: {title}\n\nVideo prompt: {prompt}",
         )
+
+    async def generate_youtube_metadata(
+        self, topic: str, final_prompt: str
+    ) -> YouTubeMetadata:
+        """Return ``{"title", "description", "tags"}`` in a single call.
+
+        This is the preferred entry point for the workflow's metadata phase
+        because it gives the LLM full context (topic + final prompt) and lets
+        it produce coherent title/description/tags together.
+        """
+        if self.is_mock:
+            slug = re.sub(r"\s+", " ", topic.strip())[:40]
+            title = f"A Visual Journey Through {slug}"
+            description = (
+                f"{title}\n\nIn this short, cinematic piece we explore the subject "
+                f"with measured pacing and warm visuals. The video aims to give "
+                f"viewers a quiet moment to take in the material without distraction. "
+                f"If you enjoyed it, please like and subscribe for more — it helps "
+                f"the channel reach more people who appreciate this kind of work."
+            )
+            tags = _topic_to_mock_tags(topic)
+            return {"title": title, "description": description, "tags": tags}
+
+        raw = await self._chat(
+            self._METADATA_SYSTEM,
+            f"Video topic: {topic}\n\nVideo prompt: {final_prompt}",
+        )
+        return _parse_metadata_json(raw)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+def _topic_to_mock_tags(topic: str) -> list[str]:
+    """Build a deterministic 5-tag list from a topic for the mock path."""
+    base = ["cinematic", "shorts", "storytelling", "voiceover", "video"]
+    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")
+    if slug:
+        base.insert(0, slug[:30])
+    return base[:8]
+
+
+def _parse_metadata_json(raw: str) -> YouTubeMetadata:
+    """Parse the LLM's JSON metadata response with defensive fallbacks.
+
+    Strips Markdown fences if the model added them, raises ValueError on
+    fundamentally malformed output.
+    """
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        # Drop opening fence (``` or ```json) and trailing fence.
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned non-JSON metadata: {raw[:200]!r}") from exc
+
+    title = str(data.get("title", "")).strip()
+    description = str(data.get("description", "")).strip()
+    raw_tags = data.get("tags", [])
+    if isinstance(raw_tags, str):
+        raw_tags = [t.strip() for t in raw_tags.split(",")]
+    tags = [str(t).strip().lower().lstrip("#") for t in raw_tags if str(t).strip()]
+    return {"title": title, "description": description, "tags": tags}

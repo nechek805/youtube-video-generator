@@ -247,8 +247,7 @@ def build_workflow_graph(
         active_prompt = project.edited_prompt or project.generated_prompt or ""
 
         try:
-            title = await llm.generate_youtube_title(active_prompt)
-            description = await llm.generate_youtube_description(active_prompt, title)
+            metadata = await llm.generate_youtube_metadata(project.topic, active_prompt)
         except Exception as exc:
             project.metadata_status = MetadataStatus.FAILED
             project.workflow_status = WorkflowStatus.FAILED
@@ -258,8 +257,9 @@ def build_workflow_graph(
             logger.exception("Metadata generation failed for project %d", project.id)
             raise VideoGenerationFailed(f"Metadata generation failed: {exc}") from exc
 
-        project.title = title
-        project.description = description
+        project.title = metadata["title"]
+        project.description = metadata["description"]
+        project.tags = metadata["tags"]
         project.metadata_status = MetadataStatus.READY
         project.updated_at = _now()
         await repo.update_project(project)
