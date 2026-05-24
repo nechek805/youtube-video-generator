@@ -47,22 +47,6 @@ class LLMService:
         "general audiences. Return only the prompt text with no extra commentary."
     )
 
-    _TITLE_SYSTEM = (
-        "You are a YouTube SEO specialist. "
-        "Given a video generation prompt, write one compelling YouTube video title "
-        "that is under 70 characters, SEO-optimised, and attention-grabbing. "
-        "Keep titles family-friendly and avoid clickbait. "
-        "Return only the title text with no extra commentary."
-    )
-
-    _DESCRIPTION_SYSTEM = (
-        "You are a YouTube content strategist. "
-        "Given a video prompt and its title, write a YouTube description of 150–300 words "
-        "with relevant keywords and a clear call-to-action. "
-        "Keep the tone professional and brand-safe. "
-        "Return only the description text with no extra commentary."
-    )
-
     _METADATA_SYSTEM = (
         "You are a YouTube SEO and content strategist. "
         "Given a video topic and its detailed generation prompt, produce YouTube "
@@ -155,27 +139,6 @@ class LLMService:
             f"User feedback on the previous prompt:\n{user_feedback}"
         )
         return await self._chat(self._IMPROVE_SYSTEM, user_message)
-
-    async def generate_youtube_title(self, prompt: str) -> str:
-        if self.is_mock:
-            return f"A Visual Journey Through {prompt[:40].strip()}…"
-        return await self._chat(
-            self._TITLE_SYSTEM, f"Video prompt: {prompt}",
-        )
-
-    async def generate_youtube_description(self, prompt: str, title: str) -> str:
-        if self.is_mock:
-            return (
-                f"{title}\n\nIn this short, cinematic piece we explore the subject "
-                f"with measured pacing and warm visuals. The video aims to give "
-                f"viewers a quiet moment to take in the material without distraction. "
-                f"If you enjoyed it, please like and subscribe for more — it helps "
-                f"the channel reach more people who appreciate this kind of work."
-            )
-        return await self._chat(
-            self._DESCRIPTION_SYSTEM,
-            f"Video title: {title}\n\nVideo prompt: {prompt}",
-        )
 
     async def generate_youtube_metadata(
         self, topic: str, final_prompt: str
