@@ -25,7 +25,15 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db():
-    async with AsyncSession(engine) as session:
+    """Yield a session that does NOT expire attributes on commit.
+
+    Using AsyncSessionLocal (expire_on_commit=False) is required for
+    async SQLAlchemy: otherwise, every commit invalidates loaded
+    relationships and the next attribute access tries to lazy-load
+    from outside a greenlet, raising
+    "greenlet_spawn has not been called".
+    """
+    async with AsyncSessionLocal() as session:
         try:
             yield session
             await session.commit()
