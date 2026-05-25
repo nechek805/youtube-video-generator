@@ -1,9 +1,9 @@
 services:
   migrate:
-    build: .
+    build: ./backend
     profiles: ["tools"]
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     environment:
@@ -35,11 +35,11 @@ services:
     command: uv run alembic upgrade head
 
   api:
-    build: .
+    build: ./backend
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     restart: unless-stopped
@@ -79,9 +79,9 @@ services:
     command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
-    build: .
+    build: ./backend
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     restart: unless-stopped
