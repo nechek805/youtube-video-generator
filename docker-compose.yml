@@ -29,6 +29,13 @@ services:
       PIKA_API_KEY: ${PIKA_API_KEY}
       LUMA_API_KEY: ${LUMA_API_KEY}
       KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,6 +78,13 @@ services:
       PIKA_API_KEY: ${PIKA_API_KEY}
       LUMA_API_KEY: ${LUMA_API_KEY}
       KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,6 +127,13 @@ services:
       PIKA_API_KEY: ${PIKA_API_KEY}
       LUMA_API_KEY: ${LUMA_API_KEY}
       KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
