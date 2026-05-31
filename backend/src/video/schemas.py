@@ -38,6 +38,16 @@ class MetadataApprove(BaseModel):
 # Response schemas
 # ---------------------------------------------------------------------------
 
+class VideoPartRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    part_number: int
+    prompt: str
+    video_url: str
+    created_at: datetime
+
+
 class GenerationStepRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +79,9 @@ class ProjectRead(BaseModel):
 
     workflow_status: str
     error_message: str | None
+
+    parts_count: int
+    parts: list[VideoPartRead]
 
     created_at: datetime
     updated_at: datetime

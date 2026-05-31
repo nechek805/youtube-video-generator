@@ -157,6 +157,34 @@ async def approve_metadata(
     return ProjectRead.model_validate(project)
 
 
+@router.post("/projects/{project_id}/add-part", response_model=ProjectRead)
+async def add_part(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    """Add a new video part (max 3). Triggers prompt generation for the next part."""
+    try:
+        project = await service.add_part(project_id, current_user.id)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
+@router.post("/projects/{project_id}/finalize-parts", response_model=ProjectRead)
+async def finalize_parts(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    """Finalize all parts and move to metadata generation."""
+    try:
+        project = await service.finalize_parts(project_id, current_user.id)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
 @router.get("/projects/{project_id}/download")
 async def get_download(
     project_id: int,

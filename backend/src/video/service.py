@@ -191,6 +191,65 @@ class VideoService:
         })
         return await self.repo.get_project_by_id(project.id)
 
+    async def add_part(self, project_id: int, user_id: int) -> VideoProject:
+        """Start generating the prompt for the next video part (max 3 parts)."""
+        project = await self._ensure_owner(project_id, user_id)
+
+        # Must be in VIDEO/READY and have already saved the current part.
+        saved_parts = len(project.parts)
+        if (
+            project.workflow_status != WorkflowStatus.VIDEO
+            or project.video_status != VideoStatus.READY
+            or saved_parts < project.parts_count  # current part not saved yet
+        ):
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}, parts_saved={saved_parts}/{project.parts_count}",
+                required="video approved and saved as part first",
+            )
+        if project.parts_count >= 3:
+            raise InvalidProjectStatus(
+                current=f"parts_count={project.parts_count}",
+                required="parts_count < 3",
+            )
+
+        # Increment counter and clear current-part fields for the new part.
+        project.parts_count += 1
+        project.generated_prompt = None
+        project.edited_prompt = None
+        project.prompt_status = PromptStatus.PENDING
+        project.video_url = None
+        project.video_status = VideoStatus.PENDING
+        project.error_message = None
+        project.updated_at = _now()
+        await self.repo.update_project(project)
+
+        await self.graph.ainvoke({
+            "project_id": project.id,
+            "action": "add_part",
+        })
+        return await self.repo.get_project_by_id(project.id)
+
+    async def finalize_parts(self, project_id: int, user_id: int) -> VideoProject:
+        """Move from VIDEO (parts done) → METADATA generation."""
+        project = await self._ensure_owner(project_id, user_id)
+
+        saved_parts = len(project.parts)
+        if (
+            project.workflow_status != WorkflowStatus.VIDEO
+            or project.video_status != VideoStatus.READY
+            or saved_parts < project.parts_count
+        ):
+            raise InvalidProjectStatus(
+                current=f"workflow={project.workflow_status.value}, parts_saved={saved_parts}/{project.parts_count}",
+                required="all parts saved before finalizing",
+            )
+
+        await self.graph.ainvoke({
+            "project_id": project.id,
+            "action": "finalize_parts",
+        })
+        return await self.repo.get_project_by_id(project.id)
+
     # ------------------------------------------------------------------
     # YouTube publishing (stub)
     # ------------------------------------------------------------------

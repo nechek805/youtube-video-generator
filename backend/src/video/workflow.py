@@ -25,6 +25,7 @@ from src.video.models import (
     MetadataStatus,
     PromptStatus,
     VideoGenerationStep,
+    VideoPart,
     VideoStatus,
     WorkflowStatus,
 )
@@ -39,6 +40,8 @@ WorkflowAction = Literal[
     "approve_prompt",
     "approve_video",
     "reject_video",
+    "add_part",
+    "finalize_parts",
     "approve_metadata",
 ]
 
@@ -228,6 +231,42 @@ def build_workflow_graph(
         logger.info("Video rejected for project %d, returned to PROMPT", project.id)
         return state
 
+    async def save_video_part(state: WorkflowState) -> WorkflowState:
+        """Approve the current video, save it as a VideoPart, stay in VIDEO phase.
+
+        After this the project waits for the user to either add another part
+        (→ generate_prompt) or finalize (→ generate_metadata).
+        """
+        project = await repo.get_project_by_id(state["project_id"])
+        if project is None:
+            raise VideoGenerationFailed(f"Project {state['project_id']} not found")
+
+        # Mark the generation step approved.
+        latest = await repo.get_latest_step(project.id)
+        if latest:
+            latest.is_approved = True
+            await repo.update_step(latest)
+
+        # Persist this clip as a VideoPart.
+        prompt_used = project.edited_prompt or project.generated_prompt or ""
+        part = VideoPart(
+            project_id=project.id,
+            part_number=project.parts_count,
+            prompt=prompt_used,
+            video_url=project.video_url or "",
+            created_at=_now(),
+        )
+        await repo.create_video_part(part)
+
+        # Stay in VIDEO/READY — the frontend detects the "choose next step"
+        # mode via: parts.length === parts_count && video_status === 'READY'
+        project.updated_at = _now()
+        await repo.update_project(project)
+        logger.info(
+            "Part %d saved for project %d", project.parts_count, project.id
+        )
+        return state
+
     async def generate_metadata(state: WorkflowState) -> WorkflowState:
         project = await repo.get_project_by_id(state["project_id"])
         if project is None:
@@ -244,10 +283,17 @@ def build_workflow_graph(
         project.updated_at = _now()
         await repo.update_project(project)
 
-        active_prompt = project.edited_prompt or project.generated_prompt or ""
+        # Combine all part prompts for richer metadata context.
+        parts = await repo.get_parts_by_project(project.id)
+        if parts:
+            combined = "\n\n".join(
+                f"Part {p.part_number}: {p.prompt}" for p in parts
+            )
+        else:
+            combined = project.edited_prompt or project.generated_prompt or ""
 
         try:
-            metadata = await llm.generate_youtube_metadata(project.topic, active_prompt)
+            metadata = await llm.generate_youtube_metadata(project.topic, combined)
         except Exception as exc:
             project.metadata_status = MetadataStatus.FAILED
             project.workflow_status = WorkflowStatus.FAILED
@@ -299,14 +345,16 @@ def build_workflow_graph(
 
     def route_action(state: WorkflowState) -> str:
         action = state.get("action")
-        if action in ("create", "regenerate_prompt"):
+        if action in ("create", "regenerate_prompt", "add_part"):
             return "generate_prompt"
         if action == "approve_prompt":
             return "generate_video"
         if action == "approve_video":
-            return "generate_metadata"
+            return "save_video_part"   # ← saves part, stays in VIDEO
         if action == "reject_video":
             return "reject_video"
+        if action == "finalize_parts":
+            return "generate_metadata"
         if action == "approve_metadata":
             return "finalize_project"
         raise ValueError(f"Unknown workflow action: {action!r}")
@@ -321,18 +369,19 @@ def build_workflow_graph(
     graph.add_node("wait_for_prompt_approval", wait_for_prompt_approval)
     graph.add_node("generate_video", generate_video)
     graph.add_node("wait_for_video_approval", wait_for_video_approval)
+    graph.add_node("save_video_part", save_video_part)
     graph.add_node("reject_video", reject_video)
     graph.add_node("generate_metadata", generate_metadata)
     graph.add_node("wait_for_metadata_approval", wait_for_metadata_approval)
     graph.add_node("finalize_project", finalize_project)
 
-    # Single conditional router from START — handles every user action.
     graph.add_conditional_edges(
         START,
         route_action,
         {
             "generate_prompt": "generate_prompt",
             "generate_video": "generate_video",
+            "save_video_part": "save_video_part",
             "generate_metadata": "generate_metadata",
             "reject_video": "reject_video",
             "finalize_project": "finalize_project",
@@ -343,12 +392,15 @@ def build_workflow_graph(
     graph.add_edge("generate_prompt", "wait_for_prompt_approval")
     graph.add_edge("wait_for_prompt_approval", END)
 
-    # Phase 2: video — reject loops back to prompt review
+    # Phase 2: video
     graph.add_edge("generate_video", "wait_for_video_approval")
     graph.add_edge("wait_for_video_approval", END)
+    # Approve → save part → stay in VIDEO waiting for user choice
+    graph.add_edge("save_video_part", END)
+    # Reject → back to prompt review
     graph.add_edge("reject_video", "wait_for_prompt_approval")
 
-    # Phase 3: metadata
+    # Phase 3: metadata (reached via finalize_parts action)
     graph.add_edge("generate_metadata", "wait_for_metadata_approval")
     graph.add_edge("wait_for_metadata_approval", END)
 
