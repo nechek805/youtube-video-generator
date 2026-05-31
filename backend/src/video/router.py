@@ -170,14 +170,22 @@ async def get_download(
     return {"video_url": video_url}
 
 
-@router.post("/projects/{project_id}/publish-youtube", response_model=YouTubePublishResponse)
+@router.post("/projects/{project_id}/publish-youtube")
 async def publish_youtube(
     project_id: int,
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(_service),
-) -> YouTubePublishResponse:
-    try:
-        result = await service.publish_youtube_stub(project_id, current_user.id)
-    except Exception as exc:
-        _handle_common(exc)
-    return YouTubePublishResponse(**result)
+    db: AsyncSession = Depends(get_db),
+):
+    """Delegate to the YouTube router's publish endpoint."""
+    from src.youtube.router import publish_project
+    from src.youtube.schemas import YouTubePublishRequest
+    from src.youtube.service import YouTubeService
+
+    return await publish_project(
+        project_id=project_id,
+        body=YouTubePublishRequest(),
+        current_user=current_user,
+        svc=YouTubeService(db),
+        db=db,
+    )

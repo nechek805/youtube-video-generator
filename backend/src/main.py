@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 from src.auth.router import router as auth_router
 from src.user.router import router as user_router
 from src.video.router import router as video_router
+from src.youtube.router import router as youtube_router
 from src.core.config import config
 from src.core.limiter import limiter
 from src.logger import logger
@@ -54,6 +55,7 @@ if config.get_https_redirect():
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(video_router)
+app.include_router(youtube_router)
 
 # Serve files placed under backend/static (e.g. mock video samples).
 app.mount("/static", StaticFiles(directory="static"), name="static")
