@@ -85,6 +85,9 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       SENDER_EMAIL: ${SENDER_EMAIL}
       EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy

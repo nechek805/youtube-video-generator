@@ -1,23 +1,26 @@
 import { useState } from 'react'
-import { publishYouTubeStub } from '../../api/projects'
+import { useNavigate } from 'react-router-dom'
+import { YOUTUBE_CONNECT_PATH } from '../../api/youtube'
 import { VideoPlayer } from '../VideoPlayer'
+import { usePublishToYouTube, useYouTubeAccount } from '../../hooks/useYouTubeAccount'
 import type { Project } from '../../types/project'
 
 export function CompletedStep({ project }: { project: Project }) {
-  const [publishMsg, setPublishMsg] = useState<string | null>(null)
-  const [publishErr, setPublishErr] = useState<string | null>(null)
-  const [publishing, setPublishing] = useState(false)
+  const navigate = useNavigate()
+  const { data: ytAccount } = useYouTubeAccount()
+  const publish = usePublishToYouTube(project.id)
+  const [publishResult, setPublishResult] = useState<{ url: string; title: string } | null>(null)
 
   const handlePublish = async () => {
-    setPublishing(true)
-    setPublishErr(null)
+    if (!ytAccount) {
+      navigate(YOUTUBE_CONNECT_PATH)
+      return
+    }
     try {
-      const res = await publishYouTubeStub(project.id)
-      setPublishMsg(res.message)
-    } catch (e) {
-      setPublishErr((e as Error).message)
-    } finally {
-      setPublishing(false)
+      const res = await publish.mutateAsync()
+      setPublishResult({ url: res.youtube_url, title: res.title })
+    } catch {
+      // error shown via publish.error below
     }
   }
 
@@ -82,13 +85,31 @@ export function CompletedStep({ project }: { project: Project }) {
       <div>
         <button
           onClick={handlePublish}
-          disabled={publishing}
-          className="rounded-lg border border-red-500 px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+          disabled={publish.isPending}
+          className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
         >
-          {publishing ? 'Publishing…' : 'Publish to YouTube (stub)'}
+          {/* YouTube icon */}
+          <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+          {publish.isPending ? 'Publishing…' : 'Publish to YouTube'}
         </button>
-        {publishMsg && <p className="mt-2 text-sm text-gray-500">{publishMsg}</p>}
-        {publishErr && <p className="mt-2 text-sm text-red-600">{publishErr}</p>}
+
+        {!ytAccount && (
+          <p className="mt-2 text-xs text-gray-400">
+            No YouTube account connected — clicking will take you to connect it first.
+          </p>
+        )}
+
+        {publishResult && (
+          <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            ✅ Published! <a href={publishResult.url} target="_blank" rel="noopener noreferrer" className="underline font-medium">Watch on YouTube ↗</a>
+          </div>
+        )}
+
+        {publish.error && (
+          <p className="mt-2 text-sm text-red-600">{(publish.error as Error).message}</p>
+        )}
       </div>
     </div>
   )
