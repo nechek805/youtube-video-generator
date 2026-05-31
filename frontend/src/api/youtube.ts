@@ -18,9 +18,10 @@ export interface YouTubePublishResult {
 export const getYouTubeAccount = () =>
   apiFetch<YouTubeAccount>('/youtube/account')
 
-/** Redirect the browser to the Google OAuth consent screen. */
+/** Redirect the browser to the Google OAuth consent screen (backend route). */
 export const connectYouTube = () => {
-  window.location.href = '/youtube/connect'
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  window.location.href = `${base}/youtube/connect`
 }
 
 /** Disconnect (delete) the stored YouTube account. */
