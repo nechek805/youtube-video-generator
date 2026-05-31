@@ -54,3 +54,9 @@ export const publishYouTubeStub = (id: number) =>
     `/video/projects/${id}/publish-youtube`,
     { method: 'POST' },
   )
+
+export const addPart = (id: number) =>
+  apiFetch<Project>(`/video/projects/${id}/add-part`, { method: 'POST' })
+
+export const finalizeParts = (id: number) =>
+  apiFetch<Project>(`/video/projects/${id}/finalize-parts`, { method: 'POST' })

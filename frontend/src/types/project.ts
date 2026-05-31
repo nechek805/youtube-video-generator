@@ -11,6 +11,14 @@ export type VideoStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED'
 
 export type MetadataStatus = 'PENDING' | 'READY' | 'FAILED'
 
+export interface VideoPart {
+  id: number
+  part_number: number
+  prompt: string
+  video_url: string
+  created_at: string
+}
+
 export interface GenerationStep {
   id: number
   prompt_used: string
@@ -38,6 +46,9 @@ export interface Project {
 
   workflow_status: WorkflowStatus
   error_message: string | null
+
+  parts_count: number
+  parts: VideoPart[]
 
   created_at: string
   updated_at: string
