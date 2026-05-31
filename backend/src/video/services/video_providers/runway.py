@@ -21,7 +21,7 @@ class RunwayProvider(AsyncHttpProvider):
 
     API_BASE = "https://api.dev.runwayml.com/v1"
     API_VERSION = "2024-11-06"
-    MODEL = "gen3a_turbo"
+    MODEL = "gen4.5"
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -35,12 +35,14 @@ class RunwayProvider(AsyncHttpProvider):
             f"{self.API_BASE}/text_to_video",
             headers=self._headers(),
             json={
-                "promptText": prompt,
+                "promptText": prompt[:1000],
                 "model": self.MODEL,
                 "duration": 5,
-                "ratio": "1280:768",
+                "ratio": "1280:720",
             },
         )
+        if resp.is_error:
+            raise RuntimeError(f"Runway 400 body: {resp.text}")
         resp.raise_for_status()
         data = resp.json()
         job_id = data.get("id")
