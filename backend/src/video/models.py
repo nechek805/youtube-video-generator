@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -107,11 +107,19 @@ class VideoProject(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    # Multi-part: how many parts the user has initiated (1–3)
+    parts_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
     user: Mapped["User"] = relationship()
     generation_steps: Mapped[list["VideoGenerationStep"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
         order_by="VideoGenerationStep.created_at",
+    )
+    parts: Mapped[list["VideoPart"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="VideoPart.part_number",
     )
 
 
@@ -133,3 +141,32 @@ class VideoGenerationStep(Base):
     )
 
     project: Mapped["VideoProject"] = relationship(back_populates="generation_steps")
+
+
+class VideoPart(Base):
+    """One approved video clip within a multi-part project.
+
+    Part 1 is saved here when the user approves the first generated video.
+    Parts 2 and 3 are added via the add-part endpoint (max 3 total).
+    The parent VideoProject's prompt/video fields always track the
+    *currently-in-progress* part; completed parts live here.
+    """
+
+    __tablename__ = "video_parts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("video_projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    part_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    video_url: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    project: Mapped["VideoProject"] = relationship(back_populates="parts")
