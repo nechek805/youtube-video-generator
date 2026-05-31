@@ -6,6 +6,7 @@ import { NewProjectPage } from './pages/NewProjectPage'
 import { ProjectPage } from './pages/ProjectPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { YouTubeConnectPage } from './pages/YouTubeConnectPage'
 
 export default function App() {
   return (
@@ -42,6 +43,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/youtube/connect"
+          element={
+            <ProtectedRoute>
+              <YouTubeConnectPage />
             </ProtectedRoute>
           }
         />

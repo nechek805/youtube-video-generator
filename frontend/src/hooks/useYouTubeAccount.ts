@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  connectYouTube,
   disconnectYouTube,
   getYouTubeAccount,
   publishToYouTube,
@@ -17,10 +16,6 @@ export function useYouTubeAccount() {
       return failureCount < 2
     },
   })
-}
-
-export function useConnectYouTube() {
-  return { connect: connectYouTube }
 }
 
 export function useDisconnectYouTube() {

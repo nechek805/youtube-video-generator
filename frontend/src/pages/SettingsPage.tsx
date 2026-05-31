@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { Spinner } from '../components/Spinner'
 import { ApiError } from '../api/client'
+import { YOUTUBE_CONNECT_PATH } from '../api/youtube'
 import {
-  useConnectYouTube,
   useDisconnectYouTube,
   useYouTubeAccount,
 } from '../hooks/useYouTubeAccount'
 
 export function SettingsPage() {
   const { data: account, isLoading, error } = useYouTubeAccount()
-  const { connect } = useConnectYouTube()
   const disconnect = useDisconnectYouTube()
   const [searchParams] = useSearchParams()
   const [banner, setBanner] = useState<string | null>(null)
@@ -53,12 +52,12 @@ export function SettingsPage() {
             <p className="text-sm text-gray-500 mb-4">
               Connect your YouTube account to publish generated videos directly from the app.
             </p>
-            <button
-              onClick={connect}
+            <Link
+              to={YOUTUBE_CONNECT_PATH}
               className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
             >
               Connect YouTube Account
-            </button>
+            </Link>
           </div>
         )}
 
