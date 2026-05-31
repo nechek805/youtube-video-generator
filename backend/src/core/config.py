@@ -61,5 +61,16 @@ class __Config:
     def get_kling_api_key(self) -> str:
         return os.getenv("KLING_API_KEY", "")
 
+    # Google OAuth (YouTube integration)
+    def get_google_client_id(self) -> str:
+        return os.getenv("GOOGLE_CLIENT_ID", "")
+
+    def get_google_client_secret(self) -> str:
+        return os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+    def get_google_redirect_uri(self) -> str:
+        base = self.get_base_url().rstrip("/")
+        return f"{base}/youtube/callback"
+
 
 config = __Config()
