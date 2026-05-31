@@ -7,12 +7,14 @@ import type { Project } from '../../types/project'
 
 export function CompletedStep({ project }: { project: Project }) {
   const navigate = useNavigate()
-  const { data: ytAccount } = useYouTubeAccount()
+  const { data: ytAccount, isLoading: ytLoading } = useYouTubeAccount()
   const publish = usePublishToYouTube(project.id)
   const [publishResult, setPublishResult] = useState<{ url: string; title: string } | null>(null)
 
+  const isConnected = !ytLoading && !!ytAccount
+
   const handlePublish = async () => {
-    if (!ytAccount) {
+    if (!isConnected) {
       navigate(YOUTUBE_CONNECT_PATH)
       return
     }
@@ -95,7 +97,7 @@ export function CompletedStep({ project }: { project: Project }) {
           {publish.isPending ? 'Publishing…' : 'Publish to YouTube'}
         </button>
 
-        {!ytAccount && (
+        {!ytLoading && !isConnected && (
           <p className="mt-2 text-xs text-gray-400">
             No YouTube account connected — clicking will take you to connect it first.
           </p>
