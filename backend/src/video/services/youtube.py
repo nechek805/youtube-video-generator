@@ -28,7 +28,7 @@ class YouTubeUploader:
     async def upload(
         self,
         *,
-        video_url: str,
+        video_urls: list[str],
         title: str,
         description: str,
     ) -> YouTubeUploadResult:

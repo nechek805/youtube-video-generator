@@ -13,15 +13,22 @@ export const createProject = (topic: string) =>
     body: JSON.stringify({ topic }),
   })
 
+export const savePrompt = (id: number, editedPrompt: string) =>
+  apiFetch<Project>(`/video/projects/${id}/save-prompt`, {
+    method: 'POST',
+    body: JSON.stringify({ edited_prompt: editedPrompt }),
+  })
+
 export const approvePrompt = (id: number, editedPrompt?: string | null) =>
   apiFetch<Project>(`/video/projects/${id}/approve-prompt`, {
     method: 'POST',
     body: JSON.stringify({ edited_prompt: editedPrompt ?? null }),
   })
 
-export const regeneratePrompt = (id: number) =>
+export const regeneratePrompt = (id: number, instruction?: string | null) =>
   apiFetch<Project>(`/video/projects/${id}/regenerate-prompt`, {
     method: 'POST',
+    body: JSON.stringify({ instruction: instruction ?? null }),
   })
 
 export const getGenerationStatus = (id: number) =>

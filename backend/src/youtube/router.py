@@ -130,7 +130,13 @@ async def publish_project(
     except Exception:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if not project.video_url:
+    # Collect video URLs: use the ordered list of approved parts when the
+    # project has multiple parts; fall back to the single project.video_url.
+    if project.parts:
+        video_urls = [p.video_url for p in sorted(project.parts, key=lambda p: p.part_number)]
+    elif project.video_url:
+        video_urls = [project.video_url]
+    else:
         raise HTTPException(status_code=409, detail="Project has no video yet")
 
     title = body.title or project.title or project.topic
@@ -140,7 +146,7 @@ async def publish_project(
     try:
         result = await svc.upload_video(
             user_id=current_user.id,
-            video_url=project.video_url,
+            video_urls=video_urls,
             title=title,
             description=description,
             tags=tags,

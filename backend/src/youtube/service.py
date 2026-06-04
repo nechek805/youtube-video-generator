@@ -1,5 +1,7 @@
 """YouTube account management and video upload service."""
-import io
+import asyncio
+import os
+import tempfile
 from datetime import datetime, timezone
 
 import httpx
@@ -114,30 +116,94 @@ class YouTubeService:
     # Upload
     # ------------------------------------------------------------------
 
+    async def _fetch_and_concat(self, video_urls: list[str]) -> bytes:
+        """Download one or more video URLs and return a single MP4 byte string.
+
+        If only one URL is given the bytes are returned as-is.  For multiple
+        URLs the clips are concatenated (in order) using ffmpeg's demuxer
+        concat so the result is a valid MP4.
+        """
+        if len(video_urls) == 1:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.get(video_urls[0])
+            if resp.is_error:
+                raise YouTubeUploadError(
+                    f"Failed to download video: {resp.status_code}"
+                )
+            return resp.content
+
+        # Download all parts concurrently.
+        async def _dl(url: str) -> bytes:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.get(url)
+            if resp.is_error:
+                raise YouTubeUploadError(
+                    f"Failed to download video part ({url}): {resp.status_code}"
+                )
+            return resp.content
+
+        parts_bytes = await asyncio.gather(*[_dl(u) for u in video_urls])
+
+        # Write parts to temp files and concat with ffmpeg.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_paths: list[str] = []
+            for i, data in enumerate(parts_bytes):
+                path = os.path.join(tmpdir, f"part_{i}.mp4")
+                with open(path, "wb") as fh:
+                    fh.write(data)
+                input_paths.append(path)
+
+            concat_list = os.path.join(tmpdir, "concat.txt")
+            with open(concat_list, "w") as fh:
+                for path in input_paths:
+                    fh.write(f"file '{path}'\n")
+
+            output_path = os.path.join(tmpdir, "output.mp4")
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_list,
+                "-c", "copy",
+                output_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                raise YouTubeUploadError(
+                    f"ffmpeg concat failed: {stderr.decode(errors='replace')}"
+                )
+
+            with open(output_path, "rb") as fh:
+                return fh.read()
+
     async def upload_video(
         self,
         *,
         user_id: int,
-        video_url: str,
+        video_urls: list[str],
         title: str,
         description: str,
         tags: list[str] | None = None,
         privacy: str = "public",
     ) -> YouTubePublishResult:
-        """Download the video from video_url, then upload it to YouTube.
+        """Download (and optionally concatenate) videos, then upload to YouTube.
 
-        Uses the resumable upload protocol so large files are handled
-        correctly.  Returns the published video id and URL.
+        ``video_urls`` should contain one URL per approved video part in order.
+        Multiple parts are concatenated via ffmpeg before uploading.
+        Uses the resumable upload protocol so large files are handled correctly.
+        Returns the published video id and URL.
         """
         access_token = await self._get_valid_token(user_id)
 
-        # 1. Download video bytes from CDN / Runway URL.
-        logger.info("Downloading video for upload (project user=%d)", user_id)
-        async with httpx.AsyncClient(timeout=120) as client:
-            dl = await client.get(video_url)
-        if dl.is_error:
-            raise YouTubeUploadError(f"Failed to download video: {dl.status_code}")
-        video_bytes = dl.content
+        # 1. Download / concat video bytes.
+        logger.info(
+            "Downloading %d video part(s) for upload (project user=%d)",
+            len(video_urls),
+            user_id,
+        )
+        video_bytes = await self._fetch_and_concat(video_urls)
 
         # 2. Initiate a resumable upload session.
         metadata = {

@@ -25,6 +25,14 @@ class PromptApprove(BaseModel):
     edited_prompt: str | None = None  # None → accept generated_prompt as-is
 
 
+class PromptSave(BaseModel):
+    edited_prompt: str
+
+
+class PromptRegenerate(BaseModel):
+    instruction: str | None = None  # custom instruction / topic override for the LLM
+
+
 class VideoApprove(BaseModel):
     approved: bool
 

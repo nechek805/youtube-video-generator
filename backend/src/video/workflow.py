@@ -58,6 +58,7 @@ class WorkflowState(TypedDict, total=False):
 
     # Inputs for specific actions
     topic: str
+    instruction: str  # user feedback for improve_video_prompt
     edited_prompt: str | None
     edited_title: str | None
     edited_description: str | None
@@ -90,6 +91,7 @@ def build_workflow_graph(
             raise VideoGenerationFailed(f"Project {state['project_id']} not found")
 
         topic = state.get("topic") or project.topic
+        instruction = (state.get("instruction") or "").strip()
 
         project.prompt_status = PromptStatus.PENDING
         project.workflow_status = WorkflowStatus.PROMPT
@@ -98,7 +100,12 @@ def build_workflow_graph(
         await repo.update_project(project)
 
         try:
-            prompt_text = await llm.generate_video_prompt(topic)
+            # Use improve path when the user provided improvement instructions
+            # and there is already a generated prompt to refine.
+            if instruction and project.generated_prompt:
+                prompt_text = await llm.improve_video_prompt(topic, instruction)
+            else:
+                prompt_text = await llm.generate_video_prompt(topic)
         except Exception as exc:
             project.prompt_status = PromptStatus.FAILED
             project.workflow_status = WorkflowStatus.FAILED

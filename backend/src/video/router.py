@@ -18,6 +18,8 @@ from src.video.schemas import (
     ProjectListItem,
     ProjectRead,
     PromptApprove,
+    PromptRegenerate,
+    PromptSave,
     VideoApprove,
     YouTubePublishResponse,
 )
@@ -82,6 +84,20 @@ async def get_project(
     return ProjectRead.model_validate(project)
 
 
+@router.post("/projects/{project_id}/save-prompt", response_model=ProjectRead)
+async def save_prompt(
+    project_id: int,
+    body: PromptSave,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    try:
+        project = await service.save_prompt(project_id, current_user.id, body.edited_prompt)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
 @router.post("/projects/{project_id}/approve-prompt", response_model=ProjectRead)
 @limiter.limit("10/minute")
 async def approve_prompt(
@@ -103,11 +119,14 @@ async def approve_prompt(
 async def regenerate_prompt(
     request: Request,
     project_id: int,
+    body: PromptRegenerate = PromptRegenerate(),
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(_service),
 ) -> ProjectRead:
     try:
-        project = await service.regenerate_prompt(project_id, current_user.id)
+        project = await service.regenerate_prompt(
+            project_id, current_user.id, instruction=body.instruction
+        )
     except Exception as exc:
         _handle_common(exc)
     return ProjectRead.model_validate(project)

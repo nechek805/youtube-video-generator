@@ -117,17 +117,37 @@ class VideoService:
         })
         return await self.repo.get_project_by_id(project.id)
 
-    async def regenerate_prompt(self, project_id: int, user_id: int) -> VideoProject:
+    async def regenerate_prompt(
+        self, project_id: int, user_id: int, instruction: str | None = None
+    ) -> VideoProject:
         project = await self._ensure_owner(project_id, user_id)
         if project.workflow_status != WorkflowStatus.PROMPT:
             raise InvalidProjectStatus(
                 current=project.workflow_status.value,
                 required=WorkflowStatus.PROMPT.value,
             )
-        await self.graph.ainvoke({
+        state: dict = {
             "project_id": project.id,
             "action": "regenerate_prompt",
-        })
+        }
+        if instruction:
+            state["instruction"] = instruction
+        await self.graph.ainvoke(state)
+        return await self.repo.get_project_by_id(project.id)
+
+    async def save_prompt(
+        self, project_id: int, user_id: int, edited_prompt: str
+    ) -> VideoProject:
+        """Persist an edited prompt without starting video generation."""
+        project = await self._ensure_owner(project_id, user_id)
+        if project.workflow_status != WorkflowStatus.PROMPT:
+            raise InvalidProjectStatus(
+                current=project.workflow_status.value,
+                required=WorkflowStatus.PROMPT.value,
+            )
+        project.edited_prompt = edited_prompt
+        project.updated_at = _now()
+        await self.repo.update_project(project)
         return await self.repo.get_project_by_id(project.id)
 
     async def approve_prompt(
@@ -261,8 +281,13 @@ class VideoService:
                 current=project.workflow_status.value,
                 required=WorkflowStatus.COMPLETED.value,
             )
+        video_urls = (
+            [p.video_url for p in sorted(project.parts, key=lambda p: p.part_number)]
+            if project.parts
+            else [project.video_url or ""]
+        )
         result = await self.youtube.upload(
-            video_url=project.video_url or "",
+            video_urls=video_urls,
             title=project.title or "",
             description=project.description or "",
         )
