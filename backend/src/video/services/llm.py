@@ -1,65 +1,207 @@
+"""LLM service for prompt and YouTube metadata generation.
+
+Provider selection:
+  - ``LLM_PROVIDER=openai`` (default) uses ``langchain_openai.ChatOpenAI``
+    with model and key from ``OPENAI_MODEL`` / ``OPENAI_API_KEY``.
+  - ``LLM_PROVIDER=mock`` (or any value when ``OPENAI_API_KEY`` is empty)
+    falls back to deterministic mock responses so the workflow can be
+    exercised end-to-end without paying for or configuring a real key.
+
+The mock responses are intentionally simple but professional-sounding so
+they don't trip the workflow's "prompt too short" guard.
+"""
+import json
+import re
+from typing import TypedDict
+
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from src.core.config import config
+from src.logger import logger
+
+
+class YouTubeMetadata(TypedDict):
+    title: str
+    description: str
+    tags: list[str]
 
 
 class LLMService:
-    """Wraps all LLM calls used by the video workflow.
-
-    All prompts and model parameters live here. Swap the underlying provider by
-    replacing the constructor body (e.g. ChatAnthropic) without touching the
-    workflow graph.
-    """
+    """Wraps all LLM calls used by the video workflow."""
 
     _PROMPT_SYSTEM = (
         "You are a YouTube video production consultant. "
         "Given a video topic, produce a detailed, vivid video generation prompt "
         "of 150–300 words that describes the visual content, tone, style, pacing, "
-        "and narration. Return only the prompt text with no extra commentary."
+        "and narration. Keep the content professional and suitable for general "
+        "audiences. Return only the prompt text with no extra commentary."
     )
 
-    _TITLE_SYSTEM = (
-        "You are a YouTube SEO specialist. "
-        "Given a video generation prompt, write one compelling YouTube video title "
-        "that is under 70 characters, SEO-optimised, and attention-grabbing. "
-        "Return only the title text with no extra commentary."
+    _IMPROVE_SYSTEM = (
+        "You are a YouTube video production consultant. "
+        "You will be given the original video topic and the user's feedback on a "
+        "previously-generated prompt. Produce an improved 150–300 word video "
+        "generation prompt that incorporates the feedback while preserving the "
+        "original topic's intent. Keep the content professional and suitable for "
+        "general audiences. Return only the prompt text with no extra commentary."
     )
 
-    _DESCRIPTION_SYSTEM = (
-        "You are a YouTube content strategist. "
-        "Given a video prompt and its title, write a YouTube description of 150–300 words "
-        "with relevant keywords and a clear call-to-action. "
-        "Return only the description text with no extra commentary."
+    _METADATA_SYSTEM = (
+        "You are a YouTube SEO and content strategist. "
+        "Given a video topic and its detailed generation prompt, produce YouTube "
+        "metadata as a single JSON object with three keys: "
+        '"title" (string, under 70 characters, SEO-friendly, no clickbait), '
+        '"description" (string, 150-300 words, includes relevant keywords and a '
+        'clear call-to-action), and '
+        '"tags" (array of 5-12 lowercase string tags, no leading "#"). '
+        "Keep everything family-friendly and brand-safe. "
+        "Return ONLY the JSON object, no surrounding text or markdown fences."
     )
 
     def __init__(self, *, temperature: float = 0.7) -> None:
-        self._llm = ChatOpenAI(
-            api_key=config.get_openai_api_key(),
-            model=config.get_openai_model(),
-            temperature=temperature,
+        provider = (config.get_llm_provider() or "openai").lower()
+        api_key = config.get_openai_api_key()
+        self._provider = provider
+
+        # Auto-fallback to mock if no API key, even if provider="openai" --
+        # this keeps `docker compose up` working for new contributors.
+        if provider == "mock" or not api_key:
+            if provider == "openai" and not api_key:
+                logger.warning(
+                    "OPENAI_API_KEY is empty -- LLMService falling back to mock responses",
+                )
+            self._llm = None
+        else:
+            self._llm = ChatOpenAI(
+                api_key=api_key,
+                model=config.get_openai_model(),
+                temperature=temperature,
+            )
+
+    @property
+    def is_mock(self) -> bool:
+        return self._llm is None
+
+    # ------------------------------------------------------------------
+    # Real LLM call helper
+    # ------------------------------------------------------------------
+
+    async def _chat(self, system: str, user: str) -> str:
+        assert self._llm is not None  # callers guard with is_mock
+        response = await self._llm.ainvoke(
+            [SystemMessage(content=system), HumanMessage(content=user)]
+        )
+        return response.content.strip()
+
+    # ------------------------------------------------------------------
+    # Mock fallback responses
+    # ------------------------------------------------------------------
+
+    def _mock_video_prompt(self, topic: str) -> str:
+        return (
+            f"Cinematic exploration of {topic}. Open with a wide establishing shot, "
+            f"warm golden-hour lighting, slow drone push-in over textured detail. "
+            f"Tone: contemplative, inviting. Narration is calm and measured, layered "
+            f"over ambient pads with a subtle low-end pulse. Cut between intimate "
+            f"close-ups and sweeping landscapes, holding each beat just long enough "
+            f"to let the visuals breathe. Mid-section introduces archival or context "
+            f"clips, color-graded toward muted teal and amber to match the opening. "
+            f"Pacing slows in the final third for a reflective close — single slow "
+            f"track-out shot, narration trails into score. Aspect 16:9, 4K, 24 fps. "
+            f"Avoid: rapid jump cuts, harsh transitions, on-screen text overlays."
         )
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     async def generate_video_prompt(self, topic: str) -> str:
-        messages = [
-            SystemMessage(content=self._PROMPT_SYSTEM),
-            HumanMessage(content=f"Video topic: {topic}"),
-        ]
-        response = await self._llm.ainvoke(messages)
-        return response.content.strip()
+        if self.is_mock:
+            return self._mock_video_prompt(topic)
+        return await self._chat(
+            self._PROMPT_SYSTEM, f"Video topic: {topic}",
+        )
 
-    async def generate_youtube_title(self, prompt: str) -> str:
-        messages = [
-            SystemMessage(content=self._TITLE_SYSTEM),
-            HumanMessage(content=f"Video prompt: {prompt}"),
-        ]
-        response = await self._llm.ainvoke(messages)
-        return response.content.strip()
+    async def improve_video_prompt(self, topic: str, user_feedback: str) -> str:
+        """Revise a previously-generated prompt using the user's feedback.
 
-    async def generate_youtube_description(self, prompt: str, title: str) -> str:
-        messages = [
-            SystemMessage(content=self._DESCRIPTION_SYSTEM),
-            HumanMessage(content=f"Video title: {title}\n\nVideo prompt: {prompt}"),
-        ]
-        response = await self._llm.ainvoke(messages)
-        return response.content.strip()
+        ``user_feedback`` is free-form text describing what should change
+        (tone, pacing, content, length, etc.).
+        """
+        if self.is_mock:
+            return (
+                f"{self._mock_video_prompt(topic)}\n\n"
+                f"[Revised per user feedback: {user_feedback.strip()[:200]}]"
+            )
+        user_message = (
+            f"Original topic: {topic}\n\n"
+            f"User feedback on the previous prompt:\n{user_feedback}"
+        )
+        return await self._chat(self._IMPROVE_SYSTEM, user_message)
+
+    async def generate_youtube_metadata(
+        self, topic: str, final_prompt: str
+    ) -> YouTubeMetadata:
+        """Return ``{"title", "description", "tags"}`` in a single call.
+
+        This is the preferred entry point for the workflow's metadata phase
+        because it gives the LLM full context (topic + final prompt) and lets
+        it produce coherent title/description/tags together.
+        """
+        if self.is_mock:
+            slug = re.sub(r"\s+", " ", topic.strip())[:40]
+            title = f"A Visual Journey Through {slug}"
+            description = (
+                f"{title}\n\nIn this short, cinematic piece we explore the subject "
+                f"with measured pacing and warm visuals. The video aims to give "
+                f"viewers a quiet moment to take in the material without distraction. "
+                f"If you enjoyed it, please like and subscribe for more — it helps "
+                f"the channel reach more people who appreciate this kind of work."
+            )
+            tags = _topic_to_mock_tags(topic)
+            return {"title": title, "description": description, "tags": tags}
+
+        raw = await self._chat(
+            self._METADATA_SYSTEM,
+            f"Video topic: {topic}\n\nVideo prompt: {final_prompt}",
+        )
+        return _parse_metadata_json(raw)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+def _topic_to_mock_tags(topic: str) -> list[str]:
+    """Build a deterministic 5-tag list from a topic for the mock path."""
+    base = ["cinematic", "shorts", "storytelling", "voiceover", "video"]
+    slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")
+    if slug:
+        base.insert(0, slug[:30])
+    return base[:8]
+
+
+def _parse_metadata_json(raw: str) -> YouTubeMetadata:
+    """Parse the LLM's JSON metadata response with defensive fallbacks.
+
+    Strips Markdown fences if the model added them, raises ValueError on
+    fundamentally malformed output.
+    """
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        # Drop opening fence (``` or ```json) and trailing fence.
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned non-JSON metadata: {raw[:200]!r}") from exc
+
+    title = str(data.get("title", "")).strip()
+    description = str(data.get("description", "")).strip()
+    raw_tags = data.get("tags", [])
+    if isinstance(raw_tags, str):
+        raw_tags = [t.strip() for t in raw_tags.split(",")]
+    tags = [str(t).strip().lower().lstrip("#") for t in raw_tags if str(t).strip()]
+    return {"title": title, "description": description, "tags": tags}

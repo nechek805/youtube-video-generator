@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.video.models import VideoGenerationStep, VideoProject
+from src.video.models import VideoGenerationStep, VideoPart, VideoProject
 
 
 class VideoRepository:
@@ -23,7 +23,10 @@ class VideoRepository:
         stmt = (
             select(VideoProject)
             .where(VideoProject.id == project_id)
-            .options(selectinload(VideoProject.generation_steps))
+            .options(
+                selectinload(VideoProject.generation_steps),
+                selectinload(VideoProject.parts),
+            )
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
@@ -73,3 +76,22 @@ class VideoRepository:
         await self.db.commit()
         await self.db.refresh(step)
         return step
+
+    # ------------------------------------------------------------------
+    # VideoPart
+    # ------------------------------------------------------------------
+
+    async def create_video_part(self, part: VideoPart) -> VideoPart:
+        self.db.add(part)
+        await self.db.commit()
+        await self.db.refresh(part)
+        return part
+
+    async def get_parts_by_project(self, project_id: int) -> list[VideoPart]:
+        stmt = (
+            select(VideoPart)
+            .where(VideoPart.project_id == project_id)
+            .order_by(VideoPart.part_number)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())

@@ -23,6 +23,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {user && (
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-500">{user.email}</span>
+            <Link
+              to="/settings"
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+            >
+              Settings
+            </Link>
             <button
               onClick={handleLogout}
               className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"

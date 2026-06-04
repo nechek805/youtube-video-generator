@@ -1,9 +1,9 @@
 services:
   migrate:
-    build: .
+    build: ./backend
     profiles: ["tools"]
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     environment:
@@ -18,20 +18,35 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
     command: uv run alembic upgrade head
 
   api:
-    build: .
+    build: ./backend
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     restart: unless-stopped
@@ -52,9 +67,27 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,9 +96,9 @@ services:
     command: uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
-    build: .
+    build: ./backend
     volumes:
-      - .:/app
+      - ./backend:/app
       - app_venv:/app/.venv
     user: "1000:1000"
     restart: unless-stopped
@@ -86,9 +119,24 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       MOCK_VIDEO_CDN_BASE: ${MOCK_VIDEO_CDN_BASE:-https://mock-cdn.example.com/videos}
+
+      VIDEO_PROVIDER: ${VIDEO_PROVIDER:-mock}
+      MOCK_VIDEO_MODE: ${MOCK_VIDEO_MODE:-placeholder}
+      RUNWAY_API_KEY: ${RUNWAY_API_KEY}
+      PIKA_API_KEY: ${PIKA_API_KEY}
+      LUMA_API_KEY: ${LUMA_API_KEY}
+      KLING_API_KEY: ${KLING_API_KEY}
+
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
+      HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      EMAIL_APP_PASSWORD: ${EMAIL_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +146,7 @@ services:
 
   frontend:
     image: node:22-alpine
+    restart: unless-stopped
     working_dir: /app
     volumes:
       - ./frontend:/app

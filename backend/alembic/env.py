@@ -13,6 +13,7 @@ import alembic_postgresql_enum  # noqa
 from src.user import models  # noqa
 from src.session import models  # noqa
 from src.video import models  # noqa
+from src.youtube import models  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

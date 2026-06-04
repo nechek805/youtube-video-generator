@@ -6,5 +6,7 @@ export function useApprovePrompt(projectId: number) {
   return useMutation({
     mutationFn: (editedPrompt?: string | null) => approvePrompt(projectId, editedPrompt),
     onSuccess: (data) => queryClient.setQueryData(['project', projectId], data),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 }

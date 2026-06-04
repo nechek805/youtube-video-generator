@@ -92,23 +92,37 @@ npx tsc --noEmit   # type-check
 ### Video Workflow
 | Method | Path | Description | Rate limit |
 |--------|------|-------------|-----------|
-| POST | `/video/projects` | Create project, run LLM → PROMPT_READY | 10/min |
+| POST | `/video/projects` | Create project, run LLM → workflow=PROMPT, prompt=READY | 10/min |
 | GET | `/video/projects` | List user's projects | — |
-| GET | `/video/projects/{id}` | Get project + generations | — |
+| GET | `/video/projects/{id}` | Get project + generation_steps | — |
 | POST | `/video/projects/{id}/approve-prompt` | Approve/edit prompt → start video gen | 10/min |
-| GET | `/video/projects/{id}/generation-status` | Poll status while VIDEO_GENERATING | — |
-| POST | `/video/projects/{id}/approve-video` | Approve video → run LLM metadata | 10/min |
+| POST | `/video/projects/{id}/regenerate-prompt` | Re-run prompt LLM | 10/min |
+| GET | `/video/projects/{id}/generation-status` | Poll while video_status=GENERATING | — |
+| POST | `/video/projects/{id}/approve-video` | Approve/reject video → run LLM metadata | 10/min |
 | POST | `/video/projects/{id}/approve-metadata` | Approve/edit metadata → COMPLETED | — |
 | GET | `/video/projects/{id}/download` | Get video URL | — |
 | POST | `/video/projects/{id}/publish-youtube` | YouTube publish stub | — |
 
 ## Video Workflow State Machine
 
+`VideoProject` has four independent status columns:
+
 ```
-PROMPT_PENDING → PROMPT_READY → VIDEO_GENERATING → VIDEO_READY → METADATA_PENDING → METADATA_READY → COMPLETED
-                      ↑                                  │
-                      └──────── (user rejects video) ────┘
+workflow_status :  PROMPT  →  VIDEO  →  METADATA  →  COMPLETED
+                     ↑           │
+                     └─reject────┘                  (FAILED on any error)
+
+prompt_status   :  PENDING → READY  (or FAILED)
+video_status    :  PENDING → GENERATING → READY  (or FAILED)
+metadata_status :  PENDING → READY  (or FAILED)
 ```
+
+`workflow_status` is the user-facing phase; each phase status tracks
+work inside that phase. The LangGraph workflow has seven nodes:
+`generate_prompt`, `wait_for_prompt_approval`, `generate_video`,
+`wait_for_video_approval`, `generate_metadata`,
+`wait_for_metadata_approval`, `finalize_project`, plus an auxiliary
+`reject_video` node. See `backend/src/video/workflow.py`.
 
 ## Architecture Patterns
 
@@ -127,12 +141,22 @@ PROMPT_PENDING → PROMPT_READY → VIDEO_GENERATING → VIDEO_READY → METADAT
 | `CELERY_BROKER_URL` | Redis DSN (db 1) |
 | `CELERY_RESULT_BACKEND` | Redis DSN (db 2) |
 | `REDIS_URL` | Redis DSN (db 0) |
-| `OPENAI_API_KEY` | OpenAI key for LangGraph LLM calls |
+| `LLM_PROVIDER` | LLM provider: `openai` (default) or `mock` (auto when no API key) |
+| `OPENAI_API_KEY` | OpenAI key for LangGraph LLM calls (empty → mock fallback) |
 | `OPENAI_MODEL` | Model name (default: gpt-4o-mini) |
 | `MOCK_VIDEO_CDN_BASE` | Base URL for mock video files |
+| `VIDEO_PROVIDER` | Active video provider: `mock` (default), `runway`, `pika`, `luma`, `kling` |
+| `MOCK_VIDEO_MODE` | Mock-only: `placeholder` (default) or `static` (serves `/static/sample.mp4`) |
+| `RUNWAY_API_KEY` / `PIKA_API_KEY` / `LUMA_API_KEY` / `KLING_API_KEY` | Reserved for future provider integrations |
 | `RESEND_API_KEY` | Resend email API key |
 | `BASE_URL` | Public API URL (used in confirmation links) |
 | `ORIGINS` | JSON array of allowed CORS origins |
+
+## Video Providers
+
+Provider classes live in `backend/src/video/services/video_providers/` — one file per provider, each subclassing `VideoProvider` (in `base.py`). The active provider is selected by the `VIDEO_PROVIDER` env var and built by `factory.get_video_provider()`. Adding a real provider is a single-file change: implement `async generate(...)` and wire it into the factory.
+
+Only `mock` is wired up today; Runway/Pika/Luma/Kling subclasses exist as stubs that raise `NotImplementedError`.
 
 ## Database Migrations
 

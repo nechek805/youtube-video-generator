@@ -18,6 +18,8 @@ from src.video.schemas import (
     ProjectListItem,
     ProjectRead,
     PromptApprove,
+    PromptRegenerate,
+    PromptSave,
     VideoApprove,
     YouTubePublishResponse,
 )
@@ -82,6 +84,20 @@ async def get_project(
     return ProjectRead.model_validate(project)
 
 
+@router.post("/projects/{project_id}/save-prompt", response_model=ProjectRead)
+async def save_prompt(
+    project_id: int,
+    body: PromptSave,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    try:
+        project = await service.save_prompt(project_id, current_user.id, body.edited_prompt)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
 @router.post("/projects/{project_id}/approve-prompt", response_model=ProjectRead)
 @limiter.limit("10/minute")
 async def approve_prompt(
@@ -103,11 +119,14 @@ async def approve_prompt(
 async def regenerate_prompt(
     request: Request,
     project_id: int,
+    body: PromptRegenerate = PromptRegenerate(),
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(_service),
 ) -> ProjectRead:
     try:
-        project = await service.regenerate_prompt(project_id, current_user.id)
+        project = await service.regenerate_prompt(
+            project_id, current_user.id, instruction=body.instruction
+        )
     except Exception as exc:
         _handle_common(exc)
     return ProjectRead.model_validate(project)
@@ -157,6 +176,34 @@ async def approve_metadata(
     return ProjectRead.model_validate(project)
 
 
+@router.post("/projects/{project_id}/add-part", response_model=ProjectRead)
+async def add_part(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    """Add a new video part (max 3). Triggers prompt generation for the next part."""
+    try:
+        project = await service.add_part(project_id, current_user.id)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
+@router.post("/projects/{project_id}/finalize-parts", response_model=ProjectRead)
+async def finalize_parts(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(_service),
+) -> ProjectRead:
+    """Finalize all parts and move to metadata generation."""
+    try:
+        project = await service.finalize_parts(project_id, current_user.id)
+    except Exception as exc:
+        _handle_common(exc)
+    return ProjectRead.model_validate(project)
+
+
 @router.get("/projects/{project_id}/download")
 async def get_download(
     project_id: int,
@@ -170,14 +217,22 @@ async def get_download(
     return {"video_url": video_url}
 
 
-@router.post("/projects/{project_id}/publish-youtube", response_model=YouTubePublishResponse)
+@router.post("/projects/{project_id}/publish-youtube")
 async def publish_youtube(
     project_id: int,
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(_service),
-) -> YouTubePublishResponse:
-    try:
-        result = await service.publish_youtube_stub(project_id, current_user.id)
-    except Exception as exc:
-        _handle_common(exc)
-    return YouTubePublishResponse(**result)
+    db: AsyncSession = Depends(get_db),
+):
+    """Delegate to the YouTube router's publish endpoint."""
+    from src.youtube.router import publish_project
+    from src.youtube.schemas import YouTubePublishRequest
+    from src.youtube.service import YouTubeService
+
+    return await publish_project(
+        project_id=project_id,
+        body=YouTubePublishRequest(),
+        current_user=current_user,
+        svc=YouTubeService(db),
+        db=db,
+    )

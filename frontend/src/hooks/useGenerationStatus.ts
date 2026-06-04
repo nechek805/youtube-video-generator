@@ -8,7 +8,9 @@ export function useGenerationStatus(projectId: number, active: boolean) {
     queryKey: ['generation-status', projectId],
     queryFn: async () => {
       const status = await getGenerationStatus(projectId)
-      if (status.status === 'VIDEO_READY') {
+      // Once the video step is no longer GENERATING, refresh the
+      // canonical project query so the UI advances to the next phase.
+      if (status.video_status !== 'GENERATING') {
         queryClient.invalidateQueries({ queryKey: ['project', projectId] })
       }
       return status

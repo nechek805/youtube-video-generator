@@ -15,6 +15,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "openai>=1.30.0",
     "fastapi>=0.136.1",
+    "httpx>=0.28.0",
     "passlib>=1.7.4",
     "password-validator>=1.0",
     "psycopg[binary]>=3.3.4",

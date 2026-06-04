@@ -1,13 +1,25 @@
-export type ProjectStatus =
-  | 'PROMPT_PENDING'
-  | 'PROMPT_READY'
-  | 'VIDEO_GENERATING'
-  | 'VIDEO_READY'
-  | 'METADATA_PENDING'
-  | 'METADATA_READY'
+export type WorkflowStatus =
+  | 'PROMPT'
+  | 'VIDEO'
+  | 'METADATA'
   | 'COMPLETED'
+  | 'FAILED'
 
-export interface Generation {
+export type PromptStatus = 'PENDING' | 'READY' | 'FAILED'
+
+export type VideoStatus = 'PENDING' | 'GENERATING' | 'READY' | 'FAILED'
+
+export type MetadataStatus = 'PENDING' | 'READY' | 'FAILED'
+
+export interface VideoPart {
+  id: number
+  part_number: number
+  prompt: string
+  video_url: string
+  created_at: string
+}
+
+export interface GenerationStep {
   id: number
   prompt_used: string
   video_url: string | null
@@ -19,28 +31,46 @@ export interface Generation {
 export interface Project {
   id: number
   topic: string
+
   generated_prompt: string | null
-  final_prompt: string | null
-  youtube_title: string | null
-  youtube_description: string | null
-  final_title: string | null
-  final_description: string | null
-  status: ProjectStatus
+  edited_prompt: string | null
+  prompt_status: PromptStatus
+
+  video_url: string | null
+  video_status: VideoStatus
+
+  title: string | null
+  description: string | null
+  tags: string[] | null
+  metadata_status: MetadataStatus
+
+  workflow_status: WorkflowStatus
+  error_message: string | null
+
+  parts_count: number
+  parts: VideoPart[]
+
   created_at: string
   updated_at: string
-  generations: Generation[]
+
+  generation_steps: GenerationStep[]
 }
 
 export interface ProjectListItem {
   id: number
   topic: string
-  status: ProjectStatus
+  workflow_status: WorkflowStatus
+  prompt_status: PromptStatus
+  video_status: VideoStatus
+  metadata_status: MetadataStatus
   created_at: string
   updated_at: string
 }
 
 export interface GenerationStatus {
-  status: string
+  workflow_status: WorkflowStatus
+  video_status: VideoStatus
   video_url: string | null
   celery_task_id: string | null
+  error_message: string | null
 }

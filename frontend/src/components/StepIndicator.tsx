@@ -1,39 +1,32 @@
-import type { ProjectStatus } from '../types/project'
+import type { WorkflowStatus } from '../types/project'
+import { workflowStepNumber } from '../lib/projectStatus'
 
-const STEPS: { label: string; statuses: ProjectStatus[] }[] = [
-  { label: 'Topic', statuses: ['PROMPT_PENDING', 'PROMPT_READY'] },
-  { label: 'Prompt', statuses: ['PROMPT_READY'] },
-  { label: 'Video', statuses: ['VIDEO_GENERATING', 'VIDEO_READY'] },
-  { label: 'Review', statuses: ['VIDEO_READY'] },
-  { label: 'Metadata', statuses: ['METADATA_PENDING', 'METADATA_READY'] },
-  { label: 'Done', statuses: ['COMPLETED'] },
+const STEPS = [
+  { num: 1, label: 'Prompt' },
+  { num: 2, label: 'Video' },
+  { num: 3, label: 'Metadata' },
+  { num: 4, label: 'Done' },
 ]
 
-const STATUS_TO_STEP: Record<ProjectStatus, number> = {
-  PROMPT_PENDING: 1,
-  PROMPT_READY: 2,
-  VIDEO_GENERATING: 3,
-  VIDEO_READY: 4,
-  METADATA_PENDING: 5,
-  METADATA_READY: 5,
-  COMPLETED: 6,
-}
+export function StepIndicator({ status }: { status: WorkflowStatus }) {
+  const current = workflowStepNumber(status)
+  const failed = status === 'FAILED'
 
-export function StepIndicator({ status }: { status: ProjectStatus }) {
-  const current = STATUS_TO_STEP[status] ?? 1
   return (
     <div className="flex items-center gap-2 mb-6">
       {STEPS.map((step, i) => {
-        const stepNum = i + 1
-        const done = stepNum < current
-        const active = stepNum === current
+        const done = step.num < current
+        const active = step.num === current
         return (
           <div key={step.label} className="flex items-center gap-2">
             <div
               className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold
-                ${done ? 'bg-indigo-600 text-white' : active ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-600' : 'bg-gray-100 text-gray-400'}`}
+                ${failed ? 'bg-red-100 text-red-700' :
+                  done ? 'bg-indigo-600 text-white' :
+                  active ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-600' :
+                  'bg-gray-100 text-gray-400'}`}
             >
-              {done ? '✓' : stepNum}
+              {done ? '✓' : step.num}
             </div>
             <span className={`text-sm ${active ? 'font-medium text-indigo-700' : 'text-gray-400'}`}>
               {step.label}

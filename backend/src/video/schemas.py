@@ -25,6 +25,14 @@ class PromptApprove(BaseModel):
     edited_prompt: str | None = None  # None → accept generated_prompt as-is
 
 
+class PromptSave(BaseModel):
+    edited_prompt: str
+
+
+class PromptRegenerate(BaseModel):
+    instruction: str | None = None  # custom instruction / topic override for the LLM
+
+
 class VideoApprove(BaseModel):
     approved: bool
 
@@ -37,6 +45,16 @@ class MetadataApprove(BaseModel):
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------
+
+class VideoPartRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    part_number: int
+    prompt: str
+    video_url: str
+    created_at: datetime
+
 
 class GenerationStepRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -64,10 +82,14 @@ class ProjectRead(BaseModel):
 
     title: str | None
     description: str | None
+    tags: list[str] | None
     metadata_status: str
 
     workflow_status: str
     error_message: str | None
+
+    parts_count: int
+    parts: list[VideoPartRead]
 
     created_at: datetime
     updated_at: datetime
