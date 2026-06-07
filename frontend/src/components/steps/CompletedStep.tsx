@@ -19,7 +19,7 @@ export function CompletedStep({ project }: { project: Project }) {
       return
     }
     try {
-      const res = await publish.mutateAsync()
+      const res = await publish.mutateAsync(undefined)
       setPublishResult({ url: res.youtube_url, title: res.title })
     } catch {
       // error shown via publish.error below

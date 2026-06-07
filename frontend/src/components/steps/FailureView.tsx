@@ -14,7 +14,7 @@ export function FailureView({ project }: { project: Project }) {
         You can try regenerating the prompt to restart the workflow.
       </p>
       <button
-        onClick={() => regeneratePrompt.mutate()}
+        onClick={() => regeneratePrompt.mutate(undefined)}
         disabled={regeneratePrompt.isPending}
         className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
       >
