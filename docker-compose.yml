@@ -31,6 +31,7 @@ services:
       KLING_API_KEY: ${KLING_API_KEY}
 
       BASE_URL: ${BASE_URL:-http://localhost:8000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
       HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -80,6 +81,7 @@ services:
       KLING_API_KEY: ${KLING_API_KEY}
 
       BASE_URL: ${BASE_URL:-http://localhost:8000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
       HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
       RESEND_API_KEY: ${RESEND_API_KEY}
@@ -132,6 +134,7 @@ services:
       KLING_API_KEY: ${KLING_API_KEY}
 
       BASE_URL: ${BASE_URL:-http://localhost:8000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       ORIGINS: '${ORIGINS:-["http://localhost:3000"]}'
       HTTPS_REDIRECT: ${HTTPS_REDIRECT:-false}
       RESEND_API_KEY: ${RESEND_API_KEY}
