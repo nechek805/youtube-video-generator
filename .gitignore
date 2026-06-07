@@ -9,7 +9,6 @@ coverage/
 *.log
 *.tmp
 *.cache
-*.lock
 
 # Environment & secrets
 .env
