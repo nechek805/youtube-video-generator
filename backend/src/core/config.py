@@ -23,6 +23,9 @@ class __Config:
     def get_base_url(self):
         return os.getenv("BASE_URL")
 
+    def get_frontend_base_url(self):
+        return os.getenv("FRONTEND_BASE_URL", os.getenv("BASE_URL"))
+
     def get_origins(self) -> list[str]:
         raw = os.getenv("ORIGINS", "[]")
         return json.loads(raw)

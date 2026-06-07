@@ -73,8 +73,8 @@ class UserService:
         return email_confirmation_token
 
     def _generate_confirm_email_text(self, confirmation_token: str) -> str:
-        base_url = config.get_base_url()
-        confirmation_url = f"{base_url}/auth/confirm-email?token={confirmation_token}"
+        base_url = config.get_frontend_base_url()
+        confirmation_url = f"{base_url}/confirm-email?token={confirmation_token}"
         text = f"""
 Auth Session
 
