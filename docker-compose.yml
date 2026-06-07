@@ -149,7 +149,7 @@ services:
 
   frontend:
     image: node:22-alpine
-    restart: unless-stopped
+    profiles: ["tools"]
     working_dir: /app
     volumes:
       - ./frontend:/app
