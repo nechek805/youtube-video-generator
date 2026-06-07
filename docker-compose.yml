@@ -45,7 +45,7 @@ services:
   api:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
       - app_venv:/app/.venv
