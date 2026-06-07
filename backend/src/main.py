@@ -15,7 +15,7 @@ from src.core.config import config
 from src.core.limiter import limiter
 from src.logger import logger
 
-app = FastAPI(title="Auth Session")
+app = FastAPI(title="VideoGen")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -63,4 +63,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 def main():
-    return {"message": "Hello from Auth Session API."}
+    return {"message": "Hello from VideoGen API."}
