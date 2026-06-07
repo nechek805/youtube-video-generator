@@ -11,7 +11,7 @@ RUN uv sync --frozen --no-install-project
 
 COPY . .
 
-RUN uv sync --frozen
+RUN uv sync
 
 EXPOSE 8000
 
