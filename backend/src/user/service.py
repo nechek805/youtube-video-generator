@@ -76,7 +76,7 @@ class UserService:
         base_url = config.get_frontend_base_url()
         confirmation_url = f"{base_url}/confirm-email?token={confirmation_token}"
         text = f"""
-Auth Session
+VideoGen
 
 Hello!
 
